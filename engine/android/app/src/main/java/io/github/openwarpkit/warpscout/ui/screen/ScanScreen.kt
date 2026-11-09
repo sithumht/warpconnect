@@ -1,0 +1,565 @@
+package io.github.openwarpkit.warpscout.ui.screen
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.openwarpkit.warpscout.R
+import io.github.openwarpkit.warpscout.core.DEFAULT_SCAN_PROTOCOL
+import io.github.openwarpkit.warpscout.core.ExpertScanOptions
+import io.github.openwarpkit.warpscout.core.OperationRequest
+import io.github.openwarpkit.warpscout.core.ScanPreset
+import io.github.openwarpkit.warpscout.core.resolveScanOptions
+import io.github.openwarpkit.warpscout.ui.AppViewModel
+import io.github.openwarpkit.warpscout.ui.components.ScanStartButton
+import org.json.JSONArray
+import org.json.JSONObject
+
+private data class ProtocolChoice(val id: String, val label: String)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun ScanScreen(viewModel: AppViewModel) {
+    val operation by viewModel.operation.collectAsStateWithLifecycle()
+    val toolProfile by viewModel.toolScanProfile.collectAsStateWithLifecycle()
+    val historyProfile by viewModel.historyScanProfile.collectAsStateWithLifecycle()
+    var preset by rememberSaveable { mutableStateOf(ScanPreset.Standard) }
+    var expert by rememberSaveable { mutableStateOf(false) }
+    var protocol by rememberSaveable { mutableStateOf(DEFAULT_SCAN_PROTOCOL) }
+    var ipv6 by rememberSaveable { mutableStateOf(false) }
+    var port by rememberSaveable { mutableStateOf("0") }
+    var timeout by rememberSaveable { mutableStateOf("2") }
+    var jobs by rememberSaveable { mutableStateOf("10") }
+    var target by rememberSaveable { mutableStateOf("") }
+    var tunnelPings by rememberSaveable { mutableStateOf("0") }
+    var junkCount by rememberSaveable { mutableStateOf("0") }
+    var junkMin by rememberSaveable { mutableStateOf("0") }
+    var junkMax by rememberSaveable { mutableStateOf("0") }
+    var i1 by rememberSaveable { mutableStateOf("") }
+    var autoI1 by rememberSaveable { mutableStateOf(true) }
+    var i1Domain by rememberSaveable { mutableStateOf("") }
+    var i1GenerationFailed by rememberSaveable { mutableStateOf(false) }
+    var masqueSni by rememberSaveable { mutableStateOf("") }
+    var masqueAttempts by rememberSaveable { mutableStateOf("3") }
+    var nodes by rememberSaveable { mutableStateOf("") }
+    var countries by rememberSaveable { mutableStateOf("") }
+    var mtu by rememberSaveable { mutableStateOf("0") }
+    var dns by rememberSaveable { mutableStateOf("") }
+    var speedTest by rememberSaveable { mutableStateOf(false) }
+    var bestBy by rememberSaveable { mutableStateOf("ping") }
+    var sweepPorts by rememberSaveable { mutableStateOf("") }
+    var pingTarget by rememberSaveable { mutableStateOf("") }
+    var nested by rememberSaveable { mutableStateOf(false) }
+    var through by rememberSaveable { mutableStateOf("") }
+    var innerProtocol by rememberSaveable { mutableStateOf("wg") }
+
+    LaunchedEffect(toolProfile) {
+        val profile = toolProfile ?: return@LaunchedEffect
+        expert = true
+        protocol = profile.protocol
+        if (profile.protocol == "awg") {
+            junkCount = profile.junkCount.toString()
+            junkMin = profile.junkMin.toString()
+            junkMax = profile.junkMax.toString()
+            i1 = profile.i1
+            autoI1 = false
+        } else if (profile.protocol.startsWith("masque")) {
+            masqueSni = profile.sni
+            masqueAttempts = profile.attempts.coerceAtLeast(1).toString()
+        }
+        viewModel.consumeToolScanProfile(profile)
+    }
+
+    LaunchedEffect(historyProfile) {
+        val profile = historyProfile ?: return@LaunchedEffect
+        val selected = profile.expert
+        preset = profile.preset
+        expert = true
+        protocol = selected.protocol
+        innerProtocol = selected.innerProtocol
+        ipv6 = selected.ipv6
+        port = selected.port.toString()
+        timeout = selected.timeoutSec.toString()
+        jobs = selected.jobs.toString()
+        target = selected.customTarget
+        tunnelPings = selected.tunnelPingCount.toString()
+        junkCount = selected.awgJunkCount.toString()
+        junkMin = selected.awgJunkMin.toString()
+        junkMax = selected.awgJunkMax.toString()
+        i1 = selected.awgI1
+        autoI1 = selected.awgAutoI1
+        masqueSni = selected.masqueSni
+        masqueAttempts = selected.masqueAttempts.toString()
+        nodes = selected.includeNodes.joinToString(", ")
+        countries = selected.includeCountries.joinToString(", ")
+        mtu = selected.mtu.toString()
+        dns = selected.dns.joinToString(", ")
+        speedTest = selected.speedTest
+        bestBy = selected.bestBy
+        sweepPorts = selected.sweepPorts
+        pingTarget = selected.pingTarget
+        through = selected.throughEndpoint
+        nested = selected.throughEndpoint.isNotBlank()
+        viewModel.consumeHistoryScanProfile(profile)
+    }
+
+    fun startScan() {
+        val resolved = resolveScanOptions(
+            preset = preset,
+            expertEnabled = expert,
+            expert = ExpertScanOptions(
+                protocol = protocol,
+                innerProtocol = innerProtocol,
+                ipv6 = ipv6,
+                port = port.intOr(0),
+                timeoutSec = timeout.intOr(2),
+                jobs = jobs.intOr(10),
+                customTarget = target.trim(),
+                tunnelPingCount = tunnelPings.intOr(0),
+                awgJunkCount = junkCount.intOr(0),
+                awgJunkMin = junkMin.intOr(0),
+                awgJunkMax = junkMax.intOr(0),
+                awgI1 = i1.trim(),
+                awgAutoI1 = autoI1,
+                masqueSni = masqueSni.trim(),
+                masqueAttempts = masqueAttempts.intOr(3),
+                includeNodes = nodes.stringList(),
+                includeCountries = countries.stringList(),
+                mtu = mtu.intOr(0),
+                dns = dns.stringList(),
+                speedTest = speedTest,
+                bestBy = bestBy,
+                sweepPorts = sweepPorts,
+                pingTarget = pingTarget.trim(),
+                throughEndpoint = if (nested) through.trim() else ""
+            )
+        )
+        val payload = JSONObject()
+            .put("protocol", resolved.protocol)
+            .put("innerProtocol", resolved.innerProtocol)
+            .put("ipv6", resolved.ipv6)
+            .put("port", resolved.port)
+            .put("timeoutSec", resolved.timeoutSec)
+            .put("jobs", resolved.jobs)
+            .put("samplePerSubnet", resolved.samplePerSubnet)
+            .put("full", resolved.full)
+            .put("tunnelPingCount", resolved.tunnelPingCount)
+            .put("customTarget", resolved.customTarget)
+            .put("awgJunkCount", resolved.awgJunkCount)
+            .put("awgJunkMin", resolved.awgJunkMin)
+            .put("awgJunkMax", resolved.awgJunkMax)
+            .put("awgI1", resolved.awgI1)
+            .put("awgAutoI1", resolved.awgAutoI1)
+            .put("masqueSni", resolved.masqueSni)
+            .put("masqueAttempts", resolved.masqueAttempts)
+            .put("includeNodes", JSONArray(resolved.includeNodes))
+            .put("includeCountries", JSONArray(resolved.includeCountries))
+            .put("mtu", resolved.mtu)
+            .put("dns", JSONArray(resolved.dns))
+            .put("speedTest", resolved.speedTest)
+            .put("bestBy", resolved.bestBy)
+            .put("sweepPorts", resolved.sweepPorts)
+            .put("pingTarget", resolved.pingTarget)
+            .put("throughEndpoint", resolved.throughEndpoint)
+            .toString()
+        viewModel.start(OperationRequest("scan", payload, preset.id, resolved.protocol))
+    }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.scan_title)) }) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    stringResource(R.string.scan_description),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PresetChip(ScanPreset.Standard, preset, R.string.preset_standard) { preset = it }
+                    PresetChip(ScanPreset.Durable, preset, R.string.preset_durable) { preset = it }
+                    PresetChip(ScanPreset.Full, preset, R.string.preset_full) { preset = it }
+                }
+                Text(
+                    stringResource(
+                        when (preset) {
+                            ScanPreset.Standard -> R.string.preset_standard_description
+                            ScanPreset.Durable -> R.string.preset_durable_description
+                            ScanPreset.Full -> R.string.preset_full_description
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = expert,
+                            role = Role.Switch,
+                            onValueChange = { expert = it }
+                        )
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(stringResource(R.string.expert_mode), style = MaterialTheme.typography.titleMedium)
+                    Switch(checked = expert, onCheckedChange = null)
+                }
+                if (expert) {
+                    HorizontalDivider()
+                    Text(stringResource(R.string.protocol), style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            ProtocolChoice("wg", "WG"),
+                            ProtocolChoice("awg", "AWG"),
+                            ProtocolChoice("masque", "MASQUE H3"),
+                            ProtocolChoice("masque-h2", "MASQUE H2")
+                        ).forEach { choice ->
+                            FilterChip(
+                                selected = protocol == choice.id,
+                                onClick = {
+                                    protocol = choice.id
+                                    if (choice.id.startsWith("masque")) sweepPorts = ""
+                                },
+                                label = { Text(choice.label) }
+                            )
+                        }
+                    }
+                    Text(stringResource(R.string.ip_family), style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !ipv6, onClick = { ipv6 = false }, label = { Text(stringResource(R.string.ipv4)) })
+                        FilterChip(selected = ipv6, onClick = { ipv6 = true }, label = { Text(stringResource(R.string.ipv6)) })
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        NumberField(
+                            port,
+                            { port = it },
+                            R.string.port,
+                            Modifier.weight(1f),
+                            enabled = sweepPorts.isEmpty()
+                        )
+                        NumberField(timeout, { timeout = it }, R.string.timeout, Modifier.weight(1f))
+                        NumberField(jobs, { jobs = it }, R.string.jobs, Modifier.weight(1f))
+                    }
+                    if (!protocol.startsWith("masque")) {
+                        Text(stringResource(R.string.port_scan_mode), style = MaterialTheme.typography.titleMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                "" to R.string.port_scan_first,
+                                "open" to R.string.port_scan_open,
+                                "all" to R.string.port_scan_all
+                            ).forEach { (mode, label) ->
+                                FilterChip(
+                                    selected = sweepPorts == mode,
+                                    onClick = {
+                                        sweepPorts = mode
+                                        if (mode.isNotEmpty()) port = "0"
+                                    },
+                                    label = { Text(stringResource(label)) }
+                                )
+                            }
+                        }
+                        if (sweepPorts.isNotEmpty()) {
+                            Text(
+                                stringResource(
+                                    if (sweepPorts == "all") {
+                                        R.string.port_scan_all_notice
+                                    } else {
+                                        R.string.port_scan_open_notice
+                                    }
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = target,
+                        onValueChange = { target = it },
+                        label = { Text(stringResource(R.string.custom_target)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    NumberField(tunnelPings, { tunnelPings = it }, R.string.tunnel_pings, Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = pingTarget,
+                        onValueChange = {
+                            pingTarget = it
+                            if (it.isNotBlank() && tunnelPings.intOr(0) <= 0) tunnelPings = "10"
+                        },
+                        label = { Text(stringResource(R.string.ping_target)) },
+                        supportingText = { Text(stringResource(R.string.ping_target_description)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (protocol == "awg") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            NumberField(junkCount, { junkCount = it }, "Jc", Modifier.weight(1f))
+                            NumberField(junkMin, { junkMin = it }, "Jmin", Modifier.weight(1f))
+                            NumberField(junkMax, { junkMax = it }, "Jmax", Modifier.weight(1f))
+                        }
+                        ToggleRow(R.string.awg_auto_i1, autoI1) { autoI1 = it }
+                        Text(
+                            stringResource(R.string.awg_auto_i1_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = i1,
+                            enabled = !autoI1,
+                            onValueChange = { i1 = it },
+                            label = { Text("I1") },
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            minLines = 2,
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = i1Domain,
+                            enabled = !autoI1,
+                            onValueChange = {
+                                i1Domain = it
+                                i1GenerationFailed = false
+                            },
+                            label = { Text(stringResource(R.string.i1_domain)) },
+                            supportingText = {
+                                Text(
+                                    stringResource(
+                                        if (i1GenerationFailed) {
+                                            R.string.i1_generation_failed
+                                        } else {
+                                            R.string.i1_domain_description
+                                        }
+                                    )
+                                )
+                            },
+                            isError = i1GenerationFailed,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedButton(
+                            enabled = !autoI1 && i1Domain.isNotBlank(),
+                            onClick = {
+                                viewModel.generateI1(i1Domain.trim())
+                                    .onSuccess {
+                                        i1 = it
+                                        i1GenerationFailed = false
+                                    }
+                                    .onFailure { i1GenerationFailed = true }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.generate_i1))
+                        }
+                    }
+                    if (protocol.startsWith("masque")) {
+                        OutlinedTextField(
+                            value = masqueSni,
+                            onValueChange = { masqueSni = it },
+                            label = { Text(stringResource(R.string.masque_sni)) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        NumberField(masqueAttempts, { masqueAttempts = it }, R.string.masque_attempts, Modifier.fillMaxWidth())
+                    }
+                    OutlinedTextField(value = nodes, onValueChange = { nodes = it }, label = { Text(stringResource(R.string.node_filters)) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = countries, onValueChange = { countries = it }, label = { Text(stringResource(R.string.country_filters)) }, modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        NumberField(mtu, { mtu = it }, R.string.mtu, Modifier.weight(1f))
+                        OutlinedTextField(value = dns, onValueChange = { dns = it }, label = { Text(stringResource(R.string.dns)) }, modifier = Modifier.weight(2f))
+                    }
+                    Text(stringResource(R.string.best_endpoint_by), style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = bestBy == "ping",
+                            onClick = { bestBy = "ping" },
+                            label = { Text(stringResource(R.string.best_by_ping)) }
+                        )
+                        FilterChip(
+                            selected = bestBy == "speed",
+                            onClick = { bestBy = "speed" },
+                            label = { Text(stringResource(R.string.best_by_speed)) }
+                        )
+                    }
+                    ToggleRow(
+                        label = R.string.speed_test,
+                        checked = speedTest || bestBy == "speed",
+                        enabled = bestBy != "speed",
+                        onCheckedChange = { speedTest = it }
+                    )
+                    if (speedTest || bestBy == "speed") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    stringResource(
+                                        if (bestBy == "speed") {
+                                            R.string.best_by_speed_notice
+                                        } else {
+                                            R.string.speed_test_selection_notice
+                                        }
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+                    ToggleRow(R.string.warp_in_warp, nested) { nested = it }
+                    if (nested) {
+                        OutlinedTextField(value = through, onValueChange = { through = it }, label = { Text(stringResource(R.string.through_endpoint)) }, modifier = Modifier.fillMaxWidth())
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = innerProtocol == "wg", onClick = { innerProtocol = "wg" }, label = { Text(stringResource(R.string.inner_wg)) })
+                            FilterChip(selected = innerProtocol == "awg", onClick = { innerProtocol = "awg" }, label = { Text(stringResource(R.string.inner_awg)) })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(88.dp))
+            }
+            if (operation.operation != "scan") {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = 8.dp)
+                ) {
+                    ScanStartButton(
+                        enabled = !operation.running,
+                        onClick = ::startScan
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetChip(value: ScanPreset, selected: ScanPreset, label: Int, onSelect: (ScanPreset) -> Unit) {
+    FilterChip(selected = value == selected, onClick = { onSelect(value) }, label = { Text(stringResource(label)) })
+}
+
+@Composable
+private fun ToggleRow(
+    label: Int,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            stringResource(label),
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            }
+        )
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+    }
+}
+
+@Composable
+private fun NumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: Int,
+    modifier: Modifier,
+    enabled: Boolean = true
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(label)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        enabled = enabled,
+        singleLine = true,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun NumberField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        modifier = modifier
+    )
+}
+
+private fun String.intOr(default: Int): Int = toIntOrNull() ?: default
+
+private fun String.stringList(): List<String> = split(',').map(String::trim).filter(String::isNotEmpty)

@@ -1,0 +1,27 @@
+# Gradle / Android build outputs
+.gradle/
+build/
+out/
+.kotlin/
+app/build/
+*/build/
+
+# Local machine settings (SDK path etc.)
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Archive of the engine's original clone metadata (kept out of the repo)
+engine.git-archive/
+
+# OS / IDE noise
+Thumbs.db
+desktop.ini
+
+engine/.gradle/
+engine/.idea/
+engine/local.properties
+engine/android/build/
+engine/android/app/build/
+engine/.cache/
