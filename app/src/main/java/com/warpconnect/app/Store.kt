@@ -256,6 +256,6 @@ class Store(context: Context) {
         private const val KEY_WINNERS = "winners"
         private const val KEY_PROFILE_ASKED = "profilePermissionsAsked"
         private const val KEY_DEVICE_ID = "deviceId"
-        private const val MAX_WINNERS = 4
+        private const val MAX_WINNERS = 8
     }
 }

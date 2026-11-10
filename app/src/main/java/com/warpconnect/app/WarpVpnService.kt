@@ -69,6 +69,9 @@ class WarpVpnService : VpnService() {
     private var activeEndpoint: String? = null
 
     private var heartbeatTick = 0
+    private var backupScanTick = 0
+    @Volatile private var backupScanRunning = false
+    private val BACKUP_SCAN_INTERVAL_TICKS = 120 // 15 s * 120 = 30 minutes of healthy uptime
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -217,7 +220,7 @@ class WarpVpnService : VpnService() {
             // Retry recently verified endpoints for this exact network
             // signature first. This is nearly always seconds instead of a scan.
             val tried = HashSet<String>()
-            val knownGood = store.recentWinners(networkKey).take(3)
+            val knownGood = store.recentWinners(networkKey).take(4)
             if (knownGood.isNotEmpty()) {
                 WarpHub.log("Known-good endpoint profile for this network: ${knownGood.size} saved")
                 for ((index, winner) in knownGood.withIndex()) {
@@ -379,45 +382,50 @@ class WarpVpnService : VpnService() {
         acct: JSONObject,
         deep: Boolean,
         allowDeep: Boolean = true,
+        silent: Boolean = false,
     ): List<Candidate> {
         val plan = ArrayList<Candidate>()
 
-        WarpHub.update {
-            it.copy(
-                phase = Phase.PREPARING,
-                headline = "Scanning",
-                detail = "Looking for a WARP endpoint that passes real traffic",
-                endpoint = null,
-            )
+        if (!silent) {
+            WarpHub.update {
+                it.copy(
+                    phase = Phase.PREPARING,
+                    headline = "Scanning",
+                    detail = "Looking for a WARP endpoint that passes real traffic",
+                    endpoint = null,
+                )
+            }
+            WarpHub.log("Scanning WARP endpoints with automatic packet profiles")
         }
-        WarpHub.log("Scanning WARP endpoints with automatic packet profiles")
         var report: ScanReport? = null
         try {
             report = Engine.scan(acct.toString(), baseOptions()) { _, done, total, message ->
-                if (total > 0 && !stopping) {
+                if (!silent && total > 0 && !stopping) {
                     val suffix = if (message.isNotBlank()) " · $message" else ""
                     WarpHub.update { it.copy(detail = "$done/$total probed$suffix") }
                 }
             }
-            addScanCandidates(plan, report)
+            addScanCandidates(plan, report, silent = silent)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            WarpHub.log("Scan failed: ${e.message}")
+            if (!silent) WarpHub.log("Scan failed: ${e.message}")
         }
 
         if (allowDeep && (deep || report == null || !hasDurable(report))) {
-            WarpHub.update {
-                it.copy(
-                    headline = "Deep search",
-                    detail = "Standard scan was not durable. Testing junk profiles (up to 3 minutes)",
-                )
+            if (!silent) {
+                WarpHub.update {
+                    it.copy(
+                        headline = "Deep search",
+                        detail = "Standard scan was not durable. Testing junk profiles (up to 3 minutes)",
+                    )
+                }
+                WarpHub.log("Standard scan found nothing durable; searching junk profiles")
             }
-            WarpHub.log("Standard scan found nothing durable; searching junk profiles")
             val junk = try {
                 engineTimeout(180_000) {
                     Engine.findJunk(acct.toString(), baseOptions()) { _, _, _, message ->
-                        if (message.isNotBlank() && !stopping) {
+                        if (!silent && message.isNotBlank() && !stopping) {
                             WarpHub.update { it.copy(detail = message) }
                         }
                     }
@@ -425,13 +433,15 @@ class WarpVpnService : VpnService() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                WarpHub.log("Deep search failed: ${e.message}")
+                if (!silent) WarpHub.log("Deep search failed: ${e.message}")
                 null
             }
             if (junk != null) {
-                WarpHub.log(
-                    "Deep search chose jc=${junk.junkCount} jmin=${junk.junkMin} jmax=${junk.junkMax}",
-                )
+                if (!silent) {
+                    WarpHub.log(
+                        "Deep search chose jc=${junk.junkCount} jmin=${junk.junkMin} jmax=${junk.junkMax}",
+                    )
+                }
                 val pinned = baseOptions().apply {
                     put("awgAutoI1", false)
                     if (junk.i1.isNotBlank()) put("awgI1", junk.i1)
@@ -439,12 +449,14 @@ class WarpVpnService : VpnService() {
                     put("awgJunkMin", junk.junkMin)
                     put("awgJunkMax", junk.junkMax)
                 }
-                WarpHub.update {
-                    it.copy(headline = "Scanning", detail = "Rescanning with the winning junk profile")
+                if (!silent) {
+                    WarpHub.update {
+                        it.copy(headline = "Scanning", detail = "Rescanning with the winning junk profile")
+                    }
                 }
                 try {
                     report = Engine.scan(acct.toString(), pinned) { _, done, total, _ ->
-                        if (total > 0 && !stopping) {
+                        if (!silent && total > 0 && !stopping) {
                             WarpHub.update { it.copy(detail = "$done/$total probed with the winning junk profile") }
                         }
                     }
@@ -452,12 +464,12 @@ class WarpVpnService : VpnService() {
                     // that actually got through, so try them before the ones
                     // from the default-profile scan.
                     val pinnedPlan = ArrayList<Candidate>()
-                    addScanCandidates(pinnedPlan, report, junk.junkCount, junk.junkMin, junk.junkMax)
+                    addScanCandidates(pinnedPlan, report, junk.junkCount, junk.junkMin, junk.junkMax, silent = silent)
                     plan.addAll(0, pinnedPlan)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    WarpHub.log("Scan with the winning junk profile failed: ${e.message}")
+                    if (!silent) WarpHub.log("Scan with the winning junk profile failed: ${e.message}")
                 }
             }
         }
@@ -556,6 +568,7 @@ class WarpVpnService : VpnService() {
         jc: Int = Store.DEFAULT_JC,
         jmin: Int = Store.DEFAULT_JMIN,
         jmax: Int = Store.DEFAULT_JMAX,
+        silent: Boolean = false,
     ) {
         val winners = report.candidates(MAX_CANDIDATES)
         for (result in winners) {
@@ -568,7 +581,7 @@ class WarpVpnService : VpnService() {
                 mtu = Store.DEFAULT_MTU,
             )
         }
-        if (winners.isNotEmpty()) {
+        if (!silent && winners.isNotEmpty()) {
             val label = winners.first().label
             WarpHub.log(
                 "Scan picked ${winners.size} endpoint(s)" + if (label.isNotBlank()) " near $label" else "",
@@ -784,12 +797,29 @@ class WarpVpnService : VpnService() {
             if (alive && reachable) {
                 failures = 0
                 heartbeatTick++
+                backupScanTick++
                 // One heartbeat a minute keeps the "online now" dashboard fresh.
                 if (heartbeatTick % 4 == 0) {
                     val ep = activeEndpoint
                     if (ep != null && deviceId != null) {
                         scope.launch {
                             runCatching { Report.heartbeat(connectIdentity, ep, deviceId) }
+                        }
+                    }
+                }
+                // Refresh backup endpoints on a slow timer — only while the tunnel is healthy.
+                if (backupScanTick >= BACKUP_SCAN_INTERVAL_TICKS && !backupScanRunning) {
+                    backupScanTick = 0
+                    backupScanRunning = true
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            refreshBackupEndpoints(networkKey, acct)
+                        } catch (_: CancellationException) {
+                            // stopping or fresh tunnel state; nothing to do
+                        } catch (_: Exception) {
+                            // best effort: never disturbs the tunnel
+                        } finally {
+                            backupScanRunning = false
                         }
                     }
                 }
@@ -839,6 +869,39 @@ class WarpVpnService : VpnService() {
             markConnected(healed, networkKey, notice = "Reconnected on ${healed.endpoint}")
             failures = 0
         }
+    }
+
+    /**
+     * Quietly scan for more durable endpoints and add them to the per-network
+     * backup list. Runs only while the tunnel is healthy (called from monitor
+     * every BACKUP_SCAN_INTERVAL_TICKS ticks). Results persist via the
+     * existing Store.winner history — the connect path consumes that same
+     * list before falling back to a full scan.
+     */
+    private suspend fun refreshBackupEndpoints(networkKey: String, acct: JSONObject) {
+        val plan = buildPlan(acct, deep = false, allowDeep = false, silent = true)
+        if (plan.isEmpty()) return
+        val existing = store.recentWinners(networkKey).map { it.endpoint }.toSet()
+        val now = System.currentTimeMillis()
+        var added = 0
+        for (candidate in plan) {
+            if (candidate.endpoint in existing) continue
+            store.saveWinner(
+                Winner(
+                    endpoint = candidate.endpoint,
+                    i1 = candidate.i1,
+                    i1Label = "",
+                    jc = candidate.jc,
+                    jmin = candidate.jmin,
+                    jmax = candidate.jmax,
+                    mtu = candidate.mtu,
+                    savedAt = now,
+                    networkKey = networkKey,
+                ),
+            )
+            added++
+        }
+        if (added > 0) WarpHub.log("Background scan added $added new backup endpoint(s)")
     }
 
     private suspend fun heal(networkKey: String, acct: JSONObject): Candidate? {
@@ -973,6 +1036,7 @@ class WarpVpnService : VpnService() {
 
     private suspend fun teardown() {
         heartbeatTick = 0
+        backupScanTick = 0
         val ep = activeEndpoint
         activeEndpoint = null
         // Tell the stats server this device just left the tunnel.
