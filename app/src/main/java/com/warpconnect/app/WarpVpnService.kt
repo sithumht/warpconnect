@@ -535,16 +535,13 @@ class WarpVpnService : VpnService() {
         }
         // Best-effort: report the verified working endpoint + the network
         // profile it worked on (sampled before the tunnel came up). Failures
-        // are ignored — this must never affect the tunnel.
+        // are ignored — this must never affect the tunnel. Kept out of the
+        // visible activity log.
         val identity = connectIdentity
         scope.launch {
-            val report = runCatching {
+            runCatching {
                 Report.submit(identity, candidate.endpoint)
-            }.getOrDefault(false)
-            WarpHub.log(
-                if (report) "Endpoint report sent (${candidate.endpoint})"
-                else "Endpoint report failed (${candidate.endpoint})",
-            )
+            }
         }
     }
 
