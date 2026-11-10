@@ -231,6 +231,18 @@ class Store(context: Context) {
         .put("savedAt", winner.savedAt)
         .put("networkKey", winner.networkKey)
 
+    fun deviceId(): String {
+        val existing = prefs.getString(KEY_DEVICE_ID, null)
+        if (existing != null) return existing
+        val fresh = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString(KEY_DEVICE_ID, fresh).apply()
+        return fresh
+    }
+
+    fun clearDeviceId() {
+        prefs.edit().remove(KEY_DEVICE_ID).apply()
+    }
+
     companion object {
         const val DEFAULT_JC = 6
         const val DEFAULT_JMIN = 10
@@ -243,6 +255,7 @@ class Store(context: Context) {
         private const val KEY_WINNER = "winner"
         private const val KEY_WINNERS = "winners"
         private const val KEY_PROFILE_ASKED = "profilePermissionsAsked"
+        private const val KEY_DEVICE_ID = "deviceId"
         private const val MAX_WINNERS = 4
     }
 }

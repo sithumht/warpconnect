@@ -15,6 +15,8 @@ import java.net.URL
  */
 object Report {
     private const val URL_STD = "https://warpconnect-stats.sithu-mhtvps.workers.dev/report"
+    private const val URL_HEARTBEAT = "https://warpconnect-stats.sithu-mhtvps.workers.dev/heartbeat"
+    private const val URL_BYE = "https://warpconnect-stats.sithu-mhtvps.workers.dev/bye"
 
     data class Identity(
         val transport: String,
@@ -27,6 +29,58 @@ object Report {
         val country: String? = null,
         val city: String? = null,
     )
+
+    /** Returns true when the report was accepted (2xx from the server). */
+    suspend fun heartbeat(
+        identity: Identity?,
+        endpoint: String,
+        device: String,
+    ): Boolean = post(
+        URL_HEARTBEAT,
+        heartbeatPayload(identity, endpoint, device),
+    )
+
+    /** Tell the stats server the device is no longer in the tunnel. Best effort. */
+    suspend fun bye(device: String): Boolean = post(
+        URL_BYE,
+        JSONObject().put("device", device).toString(),
+    )
+
+    private fun heartbeatPayload(identity: Identity?, endpoint: String, device: String): String =
+        JSONObject()
+            .put("device", device)
+            .put("endpoint", endpoint)
+            .put("transport", identity?.transport ?: "unknown")
+            .put("ssid", identity?.ssid ?: "")
+            .put("carrier", identity?.carrier ?: "")
+            .put("mccmnc", identity?.mccmnc ?: "")
+            .put("isp", identity?.isp ?: "")
+            .put("asn", identity?.asn ?: "")
+            .put("asn_org", identity?.asnOrg ?: "")
+            .put("country", identity?.country ?: "")
+            .put("city", identity?.city ?: "")
+            .toString()
+
+    private suspend fun post(url: String, body: String): Boolean = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        try {
+            val u = URL(url)
+            conn = (u.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 8_000
+                readTimeout = 8_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Content-Length", body.toByteArray(Charsets.UTF_8).size.toString())
+            }
+            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
+            conn.responseCode in 200..299
+        } catch (_: Exception) {
+            false
+        } finally {
+            conn?.disconnect()
+        }
+    }
 
     /** Returns true when the report was accepted (2xx from the server). */
     suspend fun submit(identity: Identity?, endpoint: String): Boolean = withContext(Dispatchers.IO) {

@@ -65,6 +65,11 @@ class WarpVpnService : VpnService() {
     @Volatile
     private var connectIdentity: Report.Identity? = null
 
+    @Volatile
+    private var activeEndpoint: String? = null
+
+    private var heartbeatTick = 0
+
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     private fun registerNetworkWatchdog() {
@@ -513,6 +518,7 @@ class WarpVpnService : VpnService() {
                 networkKey = networkKey,
             ),
         )
+        activeEndpoint = candidate.endpoint
         val previousToastId = WarpHub.state.value.toastId
         WarpHub.set(
             WarpUiState(
@@ -539,9 +545,8 @@ class WarpVpnService : VpnService() {
         // visible activity log.
         val identity = connectIdentity
         scope.launch {
-            runCatching {
-                Report.submit(identity, candidate.endpoint)
-            }
+            runCatching { Report.submit(identity, candidate.endpoint) }
+            runCatching { Report.heartbeat(identity, candidate.endpoint, store.deviceId()) }
         }
     }
 
@@ -752,6 +757,7 @@ class WarpVpnService : VpnService() {
 
     private suspend fun monitor(networkKey: String, acct: JSONObject) {
         var failures = 0
+        val deviceId = runCatching { store.deviceId() }.getOrNull()
         while (!stopping) {
             delay(MONITOR_INTERVAL_MS)
             if (stopping) return
@@ -777,6 +783,16 @@ class WarpVpnService : VpnService() {
             val reachable = if (alive) probeTcp() else false
             if (alive && reachable) {
                 failures = 0
+                heartbeatTick++
+                // One heartbeat a minute keeps the "online now" dashboard fresh.
+                if (heartbeatTick % 4 == 0) {
+                    val ep = activeEndpoint
+                    if (ep != null && deviceId != null) {
+                        scope.launch {
+                            runCatching { Report.heartbeat(connectIdentity, ep, deviceId) }
+                        }
+                    }
+                }
                 releaseWakeLock()
                 continue
             }
@@ -956,6 +972,16 @@ class WarpVpnService : VpnService() {
     }
 
     private suspend fun teardown() {
+        heartbeatTick = 0
+        val ep = activeEndpoint
+        activeEndpoint = null
+        // Tell the stats server this device just left the tunnel.
+        if (ep != null) {
+            val id = runCatching { store.deviceId() }.getOrNull()
+            if (id != null) {
+                runCatching { Report.bye(id) }
+            }
+        }
         closeTunnel()
     }
 
