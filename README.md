@@ -105,7 +105,8 @@ Tested end to end on an Android 16 / arm64 phone (no root, sideloaded debug APK)
 ## Stats uplink
 
 On every verified connection (initial connect *and* auto-heal) the app POSTs the
-endpoint and the network profile that carried it to a small Cloudflare Worker:
+endpoint and the network profile that carried it to a Cloudflare Worker
+(`warpconnect-stats`, backed by **D1**):
 
 `POST https://warpconnect-stats.sithu-mhtvps.workers.dev/report`
 
@@ -116,15 +117,36 @@ endpoint and the network profile that carried it to a small Cloudflare Worker:
   "ssid": "",
   "carrier": "ATOM 4.5G",
   "mccmnc": "41406",
+  "isp": "Atom Myanmar Limited",
+  "asn": "AS133385",
+  "asn_org": "Atom",
+  "country": "Myanmar",
+  "city": "Yangon",
   "ts": 1762948200
 }
 ```
 
-The same host serves a public dashboard (`/`), JSON (`/stats.json`) and CSV
-(`/stats.csv`) of the last 500 reports so anyone can see which ISP works on
-which endpoint. **Note: the SSID is sent in cleartext and the dashboard is
-public** — the report is a voluntary trade-off for field data; if you don't
-want your Wi-Fi name published, don't enable it.
+The app also sends a lightweight heartbeat (~every 60 s) while connected so
+the dashboard can show an "Online now · live" panel — devices drop off the
+list within ~90 s of losing the tunnel (or immediately on a clean disconnect,
+via a `bye` signal).
+
+The same host serves a password + TOTP gated dashboard (`/`) with:
+- **Range filter pills** — `24h` / `7d` / `30d` / `all time`; every stat,
+  aggregate table and the CSV export honour the selection.
+- **Row-level CSV export** — each endpoint×profile row has a **CSV** button
+  that downloads exactly that cohort (filtered by the row's top ISPs and ASNs
+  and the current time range). Plain `/stats.csv` exports the range cohort.
+- **Aggregate leaderboard** — endpoint × profile, counts, ISPs seen, ASNs seen.
+- **Transport mix** donut, **Top endpoints** bar chart, recent-reports table.
+- Device profile, ISP, ASN, country/city, first-seen timestamp online/offline.
+
+**Auth** — `/login` requires `admin` + password + TOTP (authenticator app).
+Set via `wrangler secret put STATS_{USER,SALT,HASH,PBKDF2_ITER,TOTP_SECRET,SESSION_KEY}`.
+
+All data is stored in your own **D1 `warpconnect-stats`** database — no KV,
+no third-party storage. SQL schema is applied automatically on first request
+(`CREATE TABLE IF NOT EXISTS`).
 
 ## Requirements and limits
 
