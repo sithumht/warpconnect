@@ -50,7 +50,10 @@ no second native build and no root requirement.
    traffic on this network (last four per network, kept in a per-network
    history), then a reduced-effort "quick scan" (single sample per subnet,
    higher parallelism, 45 s hard deadline), and only as a last resort a full
-   scan (without the 3-minute junk deep-search). This is what handles
+   scan (without the 3-minute junk deep-search). If the device loses every
+   non-VPN internet connection (Wi‑Fi and mobile data both off), a network
+   watchdog stops the tunnel cleanly instead of healing against a dead
+   network, and the UI says the VPN has been turned off. This is what handles
    "connects, then dies seconds later" DPI teardown.
 
 Everything is fixed and non-configurable: AmneziaWG, full tunnel, Cloudflare DNS
@@ -93,6 +96,9 @@ Tested end to end on an Android 16 / arm64 phone (no root, sideloaded debug APK)
   reused, connected in under 3 s.
 - Wi-Fi outage: two failed health checks, teardown, automatic scan, then healed
   on a freshly scanned endpoint and resumed carrying traffic.
+- Internet loss: Wi‑Fi and mobile data disabled with the tunnel up — a
+  network watchdog stopped the VPN within seconds and the UI showed
+  "Internet is offline — the VPN has been turned off".
 - Disconnect and force-stop while connected: the TUN interface, foreground
   service and notification were all removed; no leaked interface or wake lock.
 

@@ -6,6 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.PowerManager
@@ -58,10 +62,66 @@ class WarpVpnService : VpnService() {
     @Volatile
     private var stopping = false
 
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    private fun registerNetworkWatchdog() {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                super.onLost(network)
+                maybeStopForNoInternet()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                super.onCapabilitiesChanged(network, caps)
+                if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    maybeStopForNoInternet()
+                }
+            }
+        }
+        runCatching { cm.registerNetworkCallback(request, callback) }
+            .onFailure { WarpHub.log("Network watchdog unavailable: ${it.message}") }
+            .onSuccess { networkCallback = callback }
+    }
+
+    /**
+     * True if any non-VPN network still reports the INTERNET capability.
+     * The VPN itself does, so it is excluded — otherwise the check would
+     * never notice an outage underneath the tunnel.
+     */
+    private fun hasInternetCapableNetwork(): Boolean {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
+        return try {
+            cm.allNetworks.any { net ->
+                runCatching {
+                    val caps = cm.getNetworkCapabilities(net) ?: return@runCatching false
+                    !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                }.getOrDefault(false)
+            }
+        } catch (_: SecurityException) {
+            true // best effort: never tear the tunnel down on a security failure
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private fun maybeStopForNoInternet() {
+        if (stopping) return
+        if (!engineOwnsTun) return // nothing running to stop
+        if (hasInternetCapableNetwork()) return
+        WarpHub.log("Internet is offline — stopping WARP")
+        shutdown(offline = true)
+    }
+
     override fun onCreate() {
         super.onCreate()
         store = Store(this)
         createChannel()
+        registerNetworkWatchdog()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -91,6 +151,12 @@ class WarpVpnService : VpnService() {
 
     override fun onDestroy() {
         stopping = true
+        networkCallback?.let { cb ->
+            runCatching {
+                getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb)
+            }
+            networkCallback = null
+        }
         work?.cancel()
         Engine.cancel()
         // Blocking teardown: if the service dies while the device is still
@@ -655,6 +721,15 @@ class WarpVpnService : VpnService() {
         while (!stopping) {
             delay(MONITOR_INTERVAL_MS)
             if (stopping) return
+            // Backstop for the network watchdog: if no non-VPN network still
+            // reports internet connectivity, stop the tunnel instead of
+            // probing (and healing) against a dead network.
+            if (!hasInternetCapableNetwork()) {
+                WarpHub.log("Internet is offline — stopping WARP (monitor backstop)")
+                releaseWakeLock()
+                shutdown(offline = true)
+                return
+            }
             // Hold the CPU only for the check itself. A foreground VPN device
             // is woken by packets; keeping the device awake 24/7 just to run a
             // 15 s probe would drain the battery for no benefit.
@@ -863,7 +938,7 @@ class WarpVpnService : VpnService() {
         }
     }
 
-    private fun shutdown() {
+    private fun shutdown(offline: Boolean = false) {
         stopping = true
         work?.cancel()
         Engine.cancel()
@@ -871,12 +946,16 @@ class WarpVpnService : VpnService() {
             withContext(NonCancellable) {
                 teardown()
                 releaseWakeLock()
-                WarpHub.log("Disconnected")
+                WarpHub.log(if (offline) "Disconnected: internet offline" else "Disconnected")
                 WarpHub.set(
                     WarpUiState(
                         phase = Phase.IDLE,
                         headline = "Ready",
-                        detail = "Tap the button to connect through WARP.",
+                        detail = if (offline) {
+                            "Internet is offline — the VPN has been turned off. Tap CONNECT to reconnect."
+                        } else {
+                            "Tap the button to connect through WARP."
+                        },
                         log = WarpHub.state.value.log,
                     ),
                 )
