@@ -21,6 +21,7 @@ object Report {
         val ssid: String?,
         val carrier: String?,
         val mccmnc: String?,
+        val isp: String? = null,
     )
 
     /** Returns true when the report was accepted (2xx from the server). */
@@ -31,6 +32,7 @@ object Report {
             .put("ssid", identity?.ssid ?: "")
             .put("carrier", identity?.carrier ?: "")
             .put("mccmnc", identity?.mccmnc ?: "")
+            .put("isp", identity?.isp ?: "")
 
         val body = payload.toString()
         var conn: HttpURLConnection? = null

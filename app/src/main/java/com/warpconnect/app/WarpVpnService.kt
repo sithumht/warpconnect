@@ -188,6 +188,14 @@ class WarpVpnService : VpnService() {
             // Sample the network profile before the VPN goes up — afterwards the
         // active network is the VPN itself.
         connectIdentity = runCatching { store.reportIdentity() }.getOrNull()
+        if (connectIdentity?.transport == "wifi") {
+            // Best-effort ISP detection for Wi-Fi, done before the tunnel is
+            // up because afterwards the exit IP is Cloudflare's, not the
+            // user's ISP's.
+            val isp = runCatching { Isp.find() }.getOrNull()
+            WarpHub.log("Wi-Fi ISP: ${isp ?: "not detected"}")
+            connectIdentity = connectIdentity?.copy(isp = isp)
+        }
         val networkKey = store.networkKey()
             val acct = ensureAccount(networkKey)
             WarpHub.log("Network profile: ${networkKey.take(60)}")
