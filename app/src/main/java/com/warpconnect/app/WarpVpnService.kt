@@ -118,32 +118,34 @@ class WarpVpnService : VpnService() {
             acquireWakeLock()
             val networkKey = store.networkKey()
             val acct = ensureAccount(networkKey)
-            WarpHub.log("Network signature: ${networkKey.substringBefore('|')}")
+            WarpHub.log("Network profile: ${networkKey.take(60)}")
 
-            val cached = store.winner()?.takeIf {
-                it.networkKey == networkKey &&
-                    System.currentTimeMillis() - it.savedAt < Store.WINNER_TTL_MS
-            }
+            // Retry recently verified endpoints for this exact network
+            // signature first. This is nearly always seconds instead of a scan.
             val tried = HashSet<String>()
-            if (cached != null) {
-                val candidate = cached.toCandidate()
-                tried += candidate.endpoint
-                WarpHub.update {
-                    it.copy(
-                        phase = Phase.CONNECTING,
-                        headline = "Connecting",
-                        detail = "Trying the endpoint that worked last time",
-                        endpoint = candidate.endpoint,
-                    )
+            val knownGood = store.recentWinners(networkKey).take(3)
+            if (knownGood.isNotEmpty()) {
+                WarpHub.log("Known-good endpoint profile for this network: ${knownGood.size} saved")
+                for ((index, winner) in knownGood.withIndex()) {
+                    val candidate = winner.toCandidate()
+                    tried += candidate.endpoint
+                    WarpHub.update {
+                        it.copy(
+                            phase = Phase.CONNECTING,
+                            headline = "Connecting",
+                            detail = "Retrying saved endpoint ${index + 1} of ${knownGood.size}",
+                            endpoint = candidate.endpoint,
+                        )
+                    }
+                    WarpHub.log("Trying saved endpoint ${candidate.endpoint} (${index + 1}/${knownGood.size})")
+                    if (attempt(candidate, acct)) {
+                        markConnected(candidate, networkKey)
+                        monitor(networkKey, acct)
+                        return
+                    }
+                    teardown()
                 }
-                WarpHub.log("Reusing the endpoint that worked on this network")
-                if (attempt(candidate, acct)) {
-                    markConnected(candidate, networkKey)
-                    monitor(networkKey, acct)
-                    return
-                }
-                teardown()
-                WarpHub.log("Cached endpoint failed; scanning for a new one")
+                WarpHub.log("No saved endpoint worked; scanning for a new one")
             }
 
             val candidates = buildPlan(acct, deep = false).filterNot { it.endpoint in tried }

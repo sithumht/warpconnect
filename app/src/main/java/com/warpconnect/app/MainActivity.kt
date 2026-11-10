@@ -78,6 +78,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Profile permissions let the app save verified endpoints per network
+    // (Wi-Fi SSID and cell carrier). Asked once, at the first connect tap;
+    // if denied the network profile falls back to iface/gateway/DNS.
+    private val PROFILE_PERMISSIONS = arrayOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.READ_PHONE_STATE,
+    )
+
+    private val profilePermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { _ ->
+        // Whether granted or denied, continue with the connect flow; a denied
+        // permission only means the coarser network profile is used.
+        if (profilePending) {
+            profilePending = false
+            requestVpnConsentOrStart()
+        }
+    }
+    private var profilePending = false
+    private val store by lazy { Store(this) }
+
     private val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,6 +125,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestConnect() {
+        val missing = PROFILE_PERMISSIONS.filterNot {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty() && !store.profilePermissionsAsked) {
+            profilePending = true
+            store.profilePermissionsAsked = true
+            profilePermissions.launch(missing.toTypedArray())
+            return
+        }
+        requestVpnConsentOrStart()
+    }
+
+    private fun requestVpnConsentOrStart() {
         val consentIntent = runCatching { VpnService.prepare(this) }.getOrNull()
         if (consentIntent != null) {
             pendingStart = true

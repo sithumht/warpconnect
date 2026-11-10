@@ -18,9 +18,12 @@ no second native build and no root requirement.
    embedded bootstrap keys. Registration is a real HTTPS POST/PATCH, so a
    successful account also proves the path carried data. The account is then
    stored and reused forever; keys are never rotated.
-2. **Cached winner.** On later runs the last endpoint that worked on the current
-   network (Wi-Fi/cellular identity, 24 h TTL) is tried first. If it still
-   handshakes and passes data, the app is connected in a few seconds.
+2. **Network profile + cached winner.** The app keys saved endpoints to the
+   network profile — Wi-Fi SSID (asks for location once), or the cell carrier
+   name + MCC-MNC (asks for phone state once), falling back to
+   iface/gateway/DNS if denied. On later runs the endpoints that carried
+   traffic on this exact network (up to 3, 24 h TTL) are tried first; if one
+   still handshakes and passes data the app connects in seconds without a scan.
 3. **Scan.** Otherwise warpscout scans WARP endpoints with `protocol=awg` and
    automatic mimicry profiles (`AWGAutoI1` rotation: default, QUIC, DNS, SIP,
    legacy). It keeps only endpoints that answered 10 in-tunnel ICMP echoes to

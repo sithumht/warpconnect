@@ -3,6 +3,8 @@ package com.warpconnect.app
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
+import android.telephony.TelephonyManager
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -88,6 +90,12 @@ class Store(context: Context) {
             .apply()
     }
 
+    var profilePermissionsAsked: Boolean
+        get() = prefs.getBoolean(KEY_PROFILE_ASKED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_PROFILE_ASKED, value).apply()
+        }
+
     fun clearWinner() {
         prefs.edit().remove(KEY_WINNER).remove(KEY_WINNERS).apply()
     }
@@ -101,6 +109,11 @@ class Store(context: Context) {
      * A stable enough identity for "the network I am on right now". Must be
      * sampled before the VPN goes up, because afterwards the active network is
      * the VPN itself.
+     *
+     * - Wi-Fi: keyed to the SSID when the app can read it (location-scoped on
+     *   modern Android), falling back to iface/gateway/DNS when not.
+     * - Cell: keyed to the carrier name and MCC-MNC of the serving network.
+     * - Anything else: falls back to the legacy iface/gateway/DNS signature.
      */
     fun networkKey(): String {
         val manager = app.getSystemService(ConnectivityManager::class.java) ?: return "unknown"
@@ -122,7 +135,44 @@ class Store(context: Context) {
             ?.hostAddress
             .orEmpty()
         val dns = link?.dnsServers?.firstOrNull()?.hostAddress.orEmpty()
-        return "$transport|$iface|$gateway|$dns"
+        val legacy = "$transport|$iface|$gateway|$dns"
+        return when (transport) {
+            "wifi" -> wifiSsid()?.let { "wifi|$it" } ?: legacy
+            "cell" -> cellOperator()?.let { "cell|$it" } ?: legacy
+            else -> legacy
+        }
+    }
+
+    private fun wifiSsid(): String? {
+        return try {
+            val wifi = app.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
+            @Suppress("DEPRECATION")
+            val raw = wifi.connectionInfo?.ssid ?: return null
+            val clean = raw.trim().removeSurrounding("\"")
+            clean.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun cellOperator(): String? {
+        return try {
+            val tm = app.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return null
+            val name = tm.networkOperatorName?.trim().orEmpty().takeIf { it.isNotBlank() }
+            val code = tm.networkOperator?.trim().orEmpty().takeIf { it.isNotBlank() }
+            when {
+                name != null && code != null -> "$name|$code"
+                code != null -> code
+                name != null -> name
+                else -> null
+            }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun decodeWinner(json: JSONObject): Winner = Winner(
@@ -159,6 +209,7 @@ class Store(context: Context) {
         private const val KEY_ACCOUNT = "account"
         private const val KEY_WINNER = "winner"
         private const val KEY_WINNERS = "winners"
+        private const val KEY_PROFILE_ASKED = "profilePermissionsAsked"
         private const val MAX_WINNERS = 4
     }
 }
