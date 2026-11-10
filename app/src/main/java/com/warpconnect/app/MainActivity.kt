@@ -232,6 +232,25 @@ private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit) {
                 Spacer(Modifier.height(18.dp))
             }
 
+            state.netInfo?.takeIf { it.isNotBlank() }?.let { netInfo ->
+                Text(
+                    text = "NETWORK",
+                    fontSize = 10.sp,
+                    letterSpacing = 2.sp,
+                    color = Color(0xFF6B7A93),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = netInfo,
+                    fontSize = 12.sp,
+                    color = Color(0xFFBFD0E6),
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+
             Surface(
                 color = Color(0xFF0B1220),
                 shape = RoundedCornerShape(18.dp),

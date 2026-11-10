@@ -186,15 +186,24 @@ class WarpVpnService : VpnService() {
         try {
             acquireWakeLock()
             // Sample the network profile before the VPN goes up — afterwards the
-        // active network is the VPN itself.
+        // active network is the VPN itself. Also resolve the real ASN/ISP
+        // record; failure to detect anything never blocks the tunnel.
         connectIdentity = runCatching { store.reportIdentity() }.getOrNull()
-        if (connectIdentity?.transport == "wifi") {
-            // Best-effort ISP detection for Wi-Fi, done before the tunnel is
-            // up because afterwards the exit IP is Cloudflare's, not the
-            // user's ISP's.
-            val isp = runCatching { Isp.find() }.getOrNull()
-            WarpHub.log("Wi-Fi ISP: ${isp ?: "not detected"}")
-            connectIdentity = connectIdentity?.copy(isp = isp)
+        val netInfo = runCatching { Isp.find() }.getOrNull()
+        if (netInfo != null) {
+            connectIdentity = connectIdentity?.let { identity ->
+                identity.copy(
+                    isp = netInfo.isp.ifBlank { identity.isp },
+                    asn = netInfo.asn.ifBlank { null } ?: identity.asn,
+                    asnOrg = netInfo.asnOrg.ifBlank { null } ?: identity.asnOrg,
+                    country = netInfo.country.ifBlank { null } ?: identity.country,
+                    city = netInfo.city.ifBlank { null } ?: identity.city,
+                )
+            }
+            WarpHub.log("Network info: ${netInfo.describe()}")
+            WarpHub.update { it.copy(netInfo = netInfo.describe()) }
+        } else {
+            WarpHub.log("Network info: not detected")
         }
         val networkKey = store.networkKey()
             val acct = ensureAccount(networkKey)
@@ -515,6 +524,7 @@ class WarpVpnService : VpnService() {
                 log = WarpHub.state.value.log,
                 toastId = if (notice != null) previousToastId + 1 else previousToastId,
                 toast = notice,
+                netInfo = WarpHub.state.value.netInfo,
             ),
         )
         WarpHub.log("Connected to ${candidate.endpoint}")

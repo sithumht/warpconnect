@@ -16,6 +16,8 @@ data class WarpUiState(
     /** Set to a fresh, monotonically increasing id for each one-shot notice. */
     val toastId: Long = 0L,
     val toast: String? = null,
+    /** Pre-tunnel network info (ASN, provider, country), shown on the home screen. */
+    val netInfo: String? = null,
 ) {
     val active: Boolean
         get() = phase == Phase.PREPARING || phase == Phase.CONNECTING || phase == Phase.CONNECTED

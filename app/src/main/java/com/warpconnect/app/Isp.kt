@@ -2,22 +2,42 @@ package com.warpconnect.app
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Best-effort ISP detection from the plain network, done before the tunnel
- * comes up. Two public, unauthenticated stages: an IP echo via Cloudflare's
- * trace endpoint, then an RDAP lookup against the RIR that owns the block.
- * Any failure just yields null — never blocks or leaks errors at the UI.
+ * Best-effort network info from the plain network, done before the tunnel
+ * comes up. One pre-flight: an IP echo via Cloudflare's trace, then a single
+ * HTTPS lookup against api.ipapi.is (free, no key). Any failure yields null —
+ * never blocks or leaks errors at the UI.
  */
 object Isp {
 
-    suspend fun find(): String? = withContext(Dispatchers.IO) {
+    data class NetInfo(
+        val ip: String,
+        val asn: String,
+        val asnOrg: String,
+        val isp: String,
+        val country: String,
+        val city: String,
+        val timezone: String,
+    ) {
+        /** e.g. "45.117.1.2 | AS9560 (MPT) | Myanmar | Yangon" */
+        fun describe(): String = buildString {
+            append(ip)
+            if (asn.isNotBlank()) {
+                append(" | ").append(asn)
+                if (asnOrg.isNotBlank()) append(" (").append(asnOrg).append(")")
+            }
+            if (country.isNotBlank()) append(" | ").append(country)
+            if (city.isNotBlank()) append(" | ").append(city)
+        }
+    }
+
+    suspend fun find(): NetInfo? = withContext(Dispatchers.IO) {
         val ip = detectExternalIp() ?: return@withContext null
-        lookupIsp(ip)
+        lookup(ip)
     }
 
     private fun detectExternalIp(): String? {
@@ -33,84 +53,42 @@ object Isp {
         }
     }
 
-    private fun lookupIsp(ip: String): String? {
-        val endpoints = listOf(
-            "https://rdap.apnic.net/ip/$ip",
-            "https://rdap.arin.net/registry/ip/$ip",
-            "https://rdap.db.ripe.net/ip/$ip",
-            "https://rdap.lacnic.net/rdap/ip/$ip",
-        )
-        for (endpoint in endpoints) {
-            val body = try {
-                val url = URL(endpoint)
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 4_000
-                    readTimeout = 4_000
-                    requestMethod = "GET"
-                    setRequestProperty("Accept", "application/rdap+json")
-                }
-                if (conn.responseCode !in 200..299) continue
-                conn.inputStream.bufferedReader().readText()
-            } catch (_: Exception) {
-                continue
-            }
-            val org = parseOrg(body)
-            if (!org.isNullOrBlank()) return org
-        }
-        return null
-    }
-
-    private fun parseOrg(body: String): String? {
+    private fun lookup(ip: String): NetInfo? {
         return try {
-            val root = JSONObject(body)
-            val entities = root.optJSONArray("entities")
-            if (entities != null) {
-                val preferred = mutableListOf<String>()
-                val fallback = mutableListOf<String>()
-                for (i in 0 until entities.length()) {
-                    val entity = entities.optJSONObject(i) ?: continue
-                    val roles = entity.optJSONArray("roles")?.let { arr ->
-                        (0 until arr.length()).mapNotNull { arr.optString(it) }
-                    } ?: emptyList()
-                    val orgName = orgName(entity)
-                    if (orgName.isNullOrBlank()) continue
-                    if (roles.any { it.equals("registrant", true) }) {
-                        preferred += orgName
-                    } else if (roles.any { it.equals("administrative", true) }) {
-                        fallback += orgName
-                    } else {
-                        fallback += orgName
-                    }
-                }
-                preferred.firstOrNull() ?: fallback.firstOrNull()
-            } else {
-                root.optString("name").takeIf { it.isNotBlank() && it != "null" }
+            val url = URL("https://api.ipapi.is/?ip=$ip")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4_000
+                readTimeout = 4_000
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/json")
             }
+            if (conn.responseCode !in 200..299) return null
+            val body = conn.inputStream.bufferedReader().readText()
+            val root = JSONObject(body)
+
+            // "asn": "AS132167 Nine Communications Company Limited"
+            val asnRaw = root.optString("asn").trim()
+            val (asnNumber, asnOrg) = splitAsn(asnRaw)
+
+            NetInfo(
+                ip = root.optString("ip", ip).ifBlank { ip },
+                asn = asnNumber,
+                asnOrg = asnOrg,
+                isp = root.optString("company").ifBlank { asnOrg },
+                country = root.optString("country").ifBlank { "" },
+                city = root.optString("city").ifBlank { "" },
+                timezone = root.optString("timezone").ifBlank { "" },
+            )
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun orgName(entity: JSONObject): String? {
-        val vcard = entity.optJSONArray("vcardArray") ?: return null
-        if (vcard.length() < 2) return null
-        val entries: JSONArray = vcard.optJSONArray(1) ?: return null
-        var fn: String? = null
-        var o: String? = null
-        for (i in 0 until entries.length()) {
-            val entry = entries.optJSONArray(i) ?: continue
-            val key = entry.optString(0)
-            val value = entry.opt(3)
-            val text = when (value) {
-                is String -> value
-                is JSONArray -> value.optString(0).takeIf { it.isNotBlank() && it != "null" }
-                else -> value?.toString()
-            }?.trim()
-            when (key.lowercase()) {
-                "fn" -> fn = text?.takeIf { it.isNotBlank() }
-                "o" -> o = text?.takeIf { it.isNotBlank() }
-            }
-        }
-        return fn ?: o
+    private fun splitAsn(raw: String): Pair<String, String> {
+        if (raw.isBlank()) return "" to ""
+        // Accept "AS132167 Org Name", "as132167,", or "AS132167".
+        val idx = raw.indexOfFirst { it.isWhitespace() }
+        if (idx < 0) return raw to ""
+        return raw.substring(0, idx).trim() to raw.substring(idx + 1).trim()
     }
 }

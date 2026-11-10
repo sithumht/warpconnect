@@ -22,6 +22,10 @@ object Report {
         val carrier: String?,
         val mccmnc: String?,
         val isp: String? = null,
+        val asn: String? = null,
+        val asnOrg: String? = null,
+        val country: String? = null,
+        val city: String? = null,
     )
 
     /** Returns true when the report was accepted (2xx from the server). */
@@ -33,6 +37,10 @@ object Report {
             .put("carrier", identity?.carrier ?: "")
             .put("mccmnc", identity?.mccmnc ?: "")
             .put("isp", identity?.isp ?: "")
+            .put("asn", identity?.asn ?: "")
+            .put("asn_org", identity?.asnOrg ?: "")
+            .put("country", identity?.country ?: "")
+            .put("city", identity?.city ?: "")
 
         val body = payload.toString()
         var conn: HttpURLConnection? = null
