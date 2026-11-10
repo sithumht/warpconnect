@@ -102,6 +102,30 @@ Tested end to end on an Android 16 / arm64 phone (no root, sideloaded debug APK)
 - Disconnect and force-stop while connected: the TUN interface, foreground
   service and notification were all removed; no leaked interface or wake lock.
 
+## Stats uplink
+
+On every verified connection (initial connect *and* auto-heal) the app POSTs the
+endpoint and the network profile that carried it to a small Cloudflare Worker:
+
+`POST https://warpconnect-stats.sithu-mhtvps.workers.dev/report`
+
+```json
+{
+  "endpoint": "8.39.125.76:500",
+  "transport": "cell",
+  "ssid": "",
+  "carrier": "ATOM 4.5G",
+  "mccmnc": "41406",
+  "ts": 1762948200
+}
+```
+
+The same host serves a public dashboard (`/`), JSON (`/stats.json`) and CSV
+(`/stats.csv`) of the last 500 reports so anyone can see which ISP works on
+which endpoint. **Note: the SSID is sent in cleartext and the dashboard is
+public** — the report is a voluntary trade-off for field data; if you don't
+want your Wi-Fi name published, don't enable it.
+
 ## Requirements and limits
 
 - Android 8.0+ (`minSdk 26`), no root.

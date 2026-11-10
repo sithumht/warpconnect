@@ -143,6 +143,39 @@ class Store(context: Context) {
         }
     }
 
+    /**
+     * Raw profile data for the report uplink. Returns null if the active
+     * network cannot be identified — the report still goes out with
+     * "unknown" as the transport.
+     */
+    fun reportIdentity(): Report.Identity? {
+        return try {
+            val manager = app.getSystemService(ConnectivityManager::class.java) ?: return null
+            val network = manager.activeNetwork ?: return null
+            val capabilities = manager.getNetworkCapabilities(network) ?: return null
+            val transport = when {
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "eth"
+                else -> "unknown"
+            }
+            when (transport) {
+                "wifi" -> Report.Identity("wifi", wifiSsid(), null, null)
+                "cell" -> {
+                    val tm = app.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                    val carrier = tm?.networkOperatorName?.trim()?.takeIf { it.isNotBlank() }
+                    val mccmnc = tm?.networkOperator?.trim()?.takeIf { it.isNotBlank() }
+                    Report.Identity("cell", null, carrier, mccmnc)
+                }
+                else -> Report.Identity(transport, null, null, null)
+            }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun wifiSsid(): String? {
         return try {
             val wifi = app.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null

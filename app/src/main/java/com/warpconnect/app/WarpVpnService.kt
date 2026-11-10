@@ -62,6 +62,9 @@ class WarpVpnService : VpnService() {
     @Volatile
     private var stopping = false
 
+    @Volatile
+    private var connectIdentity: Report.Identity? = null
+
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     private fun registerNetworkWatchdog() {
@@ -182,7 +185,10 @@ class WarpVpnService : VpnService() {
 
         try {
             acquireWakeLock()
-            val networkKey = store.networkKey()
+            // Sample the network profile before the VPN goes up — afterwards the
+        // active network is the VPN itself.
+        connectIdentity = runCatching { store.reportIdentity() }.getOrNull()
+        val networkKey = store.networkKey()
             val acct = ensureAccount(networkKey)
             WarpHub.log("Network profile: ${networkKey.take(60)}")
 
@@ -508,6 +514,19 @@ class WarpVpnService : VpnService() {
             notify("Reconnected", notice)
         } else {
             notify("Connected", candidate.endpoint)
+        }
+        // Best-effort: report the verified working endpoint + the network
+        // profile it worked on (sampled before the tunnel came up). Failures
+        // are ignored — this must never affect the tunnel.
+        val identity = connectIdentity
+        scope.launch {
+            val report = runCatching {
+                Report.submit(identity, candidate.endpoint)
+            }.getOrDefault(false)
+            WarpHub.log(
+                if (report) "Endpoint report sent (${candidate.endpoint})"
+                else "Endpoint report failed (${candidate.endpoint})",
+            )
         }
     }
 
