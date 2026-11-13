@@ -75,14 +75,21 @@ function helpText() {
 }
 
 async function tg(env, method, payload) {
-  const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!data.ok) console.log(`telegram ${method} failed`, JSON.stringify(data));
-  return data;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) console.log(`telegram ${method} failed`, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    // Telegram unreachable must never crash the webhook — otherwise Telegram
+    // retries and the user gets a silent failure.
+    console.log(`telegram ${method} network error`, String(e));
+    return { ok: false, description: String(e) };
+  }
 }
 
 async function sendText(env, chatId, text) {
@@ -91,8 +98,10 @@ async function sendText(env, chatId, text) {
 
 async function sendApk(env, chatId) {
   // 3s per-chat cooldown against accidental double-taps and doc-spam.
-  if (await env.BOT_KV.get(`cooldown:${chatId}`)) return ok();
-  await env.BOT_KV.put(`cooldown:${chatId}`, "1", { expirationTtl: 3 });
+  // (KV's minimum expiration_ttl is 60s, so the window is tracked in-value.)
+  const lastSend = Number((await env.BOT_KV.get(`cooldown:${chatId}`)) || 0);
+  if (Date.now() - lastSend < 3000) return ok();
+  await env.BOT_KV.put(`cooldown:${chatId}`, String(Date.now()), { expirationTtl: 60 });
 
   let release;
   try {
@@ -121,25 +130,30 @@ async function sendApk(env, chatId) {
   }
 
   // First send of this version: server-side fetch from GitHub, then upload to Telegram.
-  const apkRes = await fetch(asset.browser_download_url, { headers: { "User-Agent": USER_AGENT } });
-  if (!apkRes.ok) {
-    await sendText(env, chatId, `APK download from GitHub failed (HTTP ${apkRes.status}).\nManual: ${asset.browser_download_url}`);
-    return ok();
-  }
-  const bytes = await apkRes.arrayBuffer();
-  const form = new FormData();
-  form.append("chat_id", String(chatId));
-  form.append("caption", caption);
-  form.append("parse_mode", "HTML");
-  form.append("document", new File([bytes], asset.name, { type: "application/vnd.android.package-archive" }), asset.name);
-  const upRes = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, { method: "POST", body: form });
-  const up = await upRes.json().catch(() => ({}));
-  if (up.ok && up.result && up.result.document && up.result.document.file_id) {
-    // Telegram keeps the file for bots forever; 180-day TTL is just hygiene.
-    await env.BOT_KV.put(`apk:${tag}`, up.result.document.file_id, { expirationTtl: 180 * 86400 });
-  } else {
-    console.log("upload failed", JSON.stringify(up));
-    await sendText(env, chatId, `APK ပေးပို့မှု မအောင်မြင်ပါ (${(up && up.description) || "Telegram error"}).\nManual: ${RELEASES_PAGE}`);
+  try {
+    const apkRes = await fetch(asset.browser_download_url, { headers: { "User-Agent": USER_AGENT } });
+    if (!apkRes.ok) {
+      await sendText(env, chatId, `APK download from GitHub failed (HTTP ${apkRes.status}).\nManual: ${asset.browser_download_url}`);
+      return ok();
+    }
+    const bytes = await apkRes.arrayBuffer();
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    form.append("caption", caption);
+    form.append("parse_mode", "HTML");
+    form.append("document", new File([bytes], asset.name, { type: "application/vnd.android.package-archive" }), asset.name);
+    const upRes = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, { method: "POST", body: form });
+    const up = await upRes.json().catch(() => ({}));
+    if (up.ok && up.result && up.result.document && up.result.document.file_id) {
+      // Telegram keeps the file for bots forever; 180-day TTL is just hygiene.
+      await env.BOT_KV.put(`apk:${tag}`, up.result.document.file_id, { expirationTtl: 180 * 86400 });
+    } else {
+      console.log("upload failed", JSON.stringify(up));
+      await sendText(env, chatId, `APK ပေးပို့မှု မအောင်မြင်ပါ (${(up && up.description) || "Telegram error"}).\nManual: ${RELEASES_PAGE}`);
+    }
+  } catch (e) {
+    console.log("apk fetch/upload exception", String(e));
+    await sendText(env, chatId, `APK ပေးပို့မှု မအောင်မြင်ပါ — GitHub ကို ချိတ်မရသေးပါ။\nManual: ${RELEASES_PAGE}`);
   }
   return ok();
 }
@@ -191,20 +205,25 @@ export default {
     const raw = msg.text.trim().split(/\s+/)[0].toLowerCase();
     const command = raw.split("@")[0];
 
-    switch (command) {
-      case "/start":
-        await sendText(env, chatId, `${helpText()}\n\nမင်္ဂလာပါ — APK ကို အောက်မှာ ပေးထားပါတယ် 👇`);
-        return sendApk(env, chatId);
-      case "/apk":
-      case "/download":
-        return sendApk(env, chatId);
-      case "/sha":
-      case "/checksum":
-        return sendSha(env, chatId);
-      case "/help":
-        return sendText(env, chatId, helpText());
-      default:
-        return sendText(env, chatId, `Commands: /start · /apk · /sha · /help\nမြန်မာဘာသာ လမ်းညွှန်: https://github.com/${REPO}/blob/main/README.my.md`);
+    try {
+      switch (command) {
+        case "/start":
+          await sendText(env, chatId, `${helpText()}\n\nမင်္ဂလာပါ — APK ကို အောက်မှာ ပေးထားပါတယ် 👇`);
+          return sendApk(env, chatId);
+        case "/apk":
+        case "/download":
+          return sendApk(env, chatId);
+        case "/sha":
+        case "/checksum":
+          return sendSha(env, chatId);
+        case "/help":
+          return sendText(env, chatId, helpText());
+        default:
+          return sendText(env, chatId, `Commands: /start · /apk · /sha · /help\nမြန်မာဘာသာ လမ်းညွှန်: https://github.com/${REPO}/blob/main/README.my.md`);
+      }
+    } catch (e) {
+      console.log("handler exception", String(e));
+      return ok();
     }
   },
 };
