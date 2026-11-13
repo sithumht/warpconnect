@@ -4,5 +4,9 @@
   "compatibility_date": "2026-08-11",
   "assets": {
     "directory": "./public"
-  }
+  },
+  "routes": [
+    { "pattern": "site.vanzconnect.online", "custom_domain": true }
+  ],
+  "workers_dev": true
 }

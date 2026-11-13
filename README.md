@@ -1,4 +1,4 @@
-# WARP Connect
+﻿# WARP Connect
 
 [![Latest release](https://img.shields.io/github/v/release/sithumht/warpconnect?label=latest)](https://github.com/sithumht/warpconnect/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-3DDC84)](https://developer.android.com/about/versions/oreo)
@@ -13,7 +13,7 @@ connected. No profile pickers, no endpoint lists, no DNS/route settings: tap
 ## Download
 
 The latest APK is on the [Releases](https://github.com/sithumht/warpconnect/releases/latest)
-page — or on the **[WARP Connect website](https://warpconnect-site.sithu-mhtvps.workers.dev/)**
+page — or on the **[WARP Connect website](https://site.vanzconnect.online/)**
 (English / မြန်မာ). Sideload it (allow "Install unknown apps" for your browser or file
 manager), or install it with `adb install -r warpconnect-vX.Y.Z.apk`. Android
 8.0+, no root required. This build is distributed outside Google Play, so
@@ -228,4 +228,5 @@ no third-party storage. SQL schema is applied automatically on first request
 Sithu ([@sithumht](https://github.com/sithumht))
 
 See the [changelog](CHANGELOG.md) for release notes.
+
 

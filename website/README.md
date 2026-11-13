@@ -24,14 +24,17 @@ npx wrangler deploy
 ```
 
 requires a Cloudflare API token (`CLOUDFLARE_API_TOKEN`) with **Workers Scripts: Edit**
-or a logged-in `wrangler login`. The site lands at
-`https://warpconnect-site.<your-subdomain>.workers.dev`.
+or a logged-in `wrangler login`. The site is live at **https://site.vanzconnect.online/**
+(Cloudflare Workers Custom Domain, zone `vanzconnect.online`), with
+`https://warpconnect-site.<your-subdomain>.workers.dev` kept as a fallback via
+`workers_dev = true` in `wrangler.jsonc`.
 
-## Custom domain
+## Custom domain (already configured)
 
-In the Cloudflare dashboard: Workers → warpconnect-site → Settings →
-Domains & Routes → Add route, e.g. `site.vanzconnect.online` (the DNS record
-must be proxied; workers handles the rest).
+The custom domain is declared in `wrangler.jsonc` (`routes` with
+`custom_domain: true`). Cloudflare auto-creates the proxied DNS record on
+deploy. To change it, edit the route there and redeploy — the dashboard
+route page shows the same binding.
 
 ## Editing rules
 
