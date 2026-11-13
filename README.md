@@ -23,6 +23,16 @@ updates come from the Releases page, not the store.
 | **Size** | ~48 MB |
 | **Signing** | Release keystore — future updates must be rebuilt with the same key |
 
+## Screenshots
+
+Captured from a real ATOM Myanmar (41406) connection on a Pixel-class arm64 phone, app v1.0.1:
+
+| Ready | Preparing | Connected · 344 ms · 3.6 Mbps |
+|:-----:|:---------:|:----------------------------:|
+| ![WARP Connect Ready state](docs/screenshots/ready.png) | ![WARP Connect Preparing state](docs/screenshots/preparing.png) | ![WARP Connect Connected state with speed test result](docs/screenshots/connected.png) |
+
+The activity log shows what the app is doing — endpoint scan results, verification failures, data confirmed — so a connection that "won't come up" is never a silent one.
+
 ## Windows
 
 A Windows desktop build is in active development. The Go engine already
