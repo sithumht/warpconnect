@@ -112,6 +112,13 @@ $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
 powershell -ExecutionPolicy Bypass -File .\engine\scripts\build-mobile.ps1
 
+# First-time only, forks and CI: if you do NOT have your own google-services.json
+# (the real one is deliberately not in the repo — see .gitignore), copy the stub.
+# The stub only proves the build links; it cannot talk to Firebase.
+if (-not (Test-Path app/google-services.json)) {
+  Copy-Item app/google-services.example.json app/google-services.json
+}
+
 # Build the app
 .\gradlew.bat :app:assembleDebug --no-daemon
 ```
