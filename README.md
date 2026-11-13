@@ -26,6 +26,10 @@ updates come from the Releases page, not the store.
 | **Size** | ~48 MB |
 | **Signing** | Release keystore — future updates must be rebuilt with the same key |
 
+## Telegram bot
+
+No browser, no account hunting: message **[@warpconnect_bot](https://t.me/warpconnect_bot)** and tap `/start` — it sends you the latest APK with the Burmese install guide inline (or `/apk`, `/sha`, `/help`). One shared link for Facebook and Telegram groups.
+
 ## Screenshots
 
 Captured from a real ATOM Myanmar (41406) connection on a Pixel-class arm64 phone, app v1.0.1:
