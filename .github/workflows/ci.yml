@@ -24,6 +24,7 @@ jobs:
         with:
           go-version-file: engine/go.mod
           cache: true
+          cache-dependency-path: engine/go.sum
       - name: Go vet
         run: go vet ./...
       - name: Engine tests
