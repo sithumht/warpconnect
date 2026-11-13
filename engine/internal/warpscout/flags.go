@@ -175,6 +175,11 @@ var (
 		{"", "i1-sni", "HOST", "host to mimic in the generated I1 (default: a random well-known host)"},
 	}}
 
+	tunnelGroup = flagGroup{"Tunnel", []flagSpec{
+		{"e", "endpoint", "ADDR", "WARP endpoint to tunnel to (IPv4 ip:port, as \"scan -best\" prints)"},
+		{"a", "account", "FILE", "cached WARP account file"},
+	}}
+
 	plainGroup = flagGroup{"Output", []flagSpec{
 		{"", "plain", "", "force plain line output (no live TUI)"},
 	}}
@@ -330,6 +335,14 @@ func setupSocksFlags(fs *flag.FlagSet, o *options) {
 	fs.StringVar(&o.through, "through", "", "")
 	fs.StringVar(&o.innerProto, "inner-proto", protoWG, "")
 	o.perSubnet = 1
+}
+
+func setupTunnelFlags(fs *flag.FlagSet, o *options) {
+	strFlag(fs, &o.endpoint, "", "e", "endpoint")
+	strFlag(fs, &o.accountPath, defaultAccount, "a", "account")
+	strFlag(fs, &o.proto, protoAWG, "p", "proto")
+	addAWGFlags(fs, o)
+	fs.BoolVar(&o.plain, "plain", false, "")
 }
 
 // Flags a command does not register stay at their zero value, so each step here

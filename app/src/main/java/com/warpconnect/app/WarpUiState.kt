@@ -18,6 +18,12 @@ data class WarpUiState(
     val toast: String? = null,
     /** Pre-tunnel network info (ASN, provider, country), shown on the home screen. */
     val netInfo: String? = null,
+    /** Latest latency measurement (ms) through the tunnel, if a test was run. */
+    val pingMs: Long? = null,
+    /** Latest throughput measurement (kbps) through the tunnel, if a test was run. */
+    val bandwidthKbps: Long? = null,
+    /** Error for the most recent speed test, if any. */
+    val speedTestError: String? = null,
 ) {
     val active: Boolean
         get() = phase == Phase.PREPARING || phase == Phase.CONNECTING || phase == Phase.CONNECTED

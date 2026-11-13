@@ -7,9 +7,17 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import java.net.HttpURLConnection
+import java.net.URL
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -18,7 +26,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +41,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -104,6 +115,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        initCrashReporting()
+        Analytics.init(this)
+        Analytics.trackLaunch()
         setContent {
             WarpTheme {
                 val context = LocalContext.current
@@ -119,6 +133,7 @@ class MainActivity : ComponentActivity() {
                     onToggle = {
                         if (state.active) disconnect() else requestConnect()
                     },
+                    onSpeedTest = ::runSpeedTest,
                 )
             }
         }
@@ -147,6 +162,78 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun runSpeedTest() {
+        if (WarpHub.state.value.phase != Phase.CONNECTED) return
+        CoroutineScope(Dispatchers.IO).launch {
+            val trace = try {
+                URL("https://1.1.1.1/cdn-cgi/trace").openConnection() as HttpURLConnection
+            } catch (_: Exception) { null }
+            var pingMs: Long? = null
+            if (trace != null) {
+                val start = SystemClock.elapsedRealtime()
+                try {
+                    trace.requestMethod = "GET"
+                    trace.connectTimeout = 4_000
+                    trace.readTimeout = 4_000
+                    trace.inputStream.bufferedReader().readText()
+                    pingMs = SystemClock.elapsedRealtime() - start
+                } catch (_: Exception) {
+                } finally {
+                    runCatching { trace.disconnect() }
+                }
+            }
+            // 2 MiB test download through the tunnel from Cloudflare's speedtest.
+            val start = SystemClock.elapsedRealtime()
+            val test = try {
+                URL("https://speed.cloudflare.com/__down?bytes=2097152").openConnection() as HttpURLConnection
+            } catch (_: Exception) { null }
+            var kbps: Long? = null
+            var err: String? = null
+            if (test != null) {
+                try {
+                    test.requestMethod = "GET"
+                    test.setRequestProperty("User-Agent", "warpconnect/1.0")
+                    test.connectTimeout = 5_000
+                    test.readTimeout = 8_000
+                    val buf = ByteArray(16 * 1024)
+                    var total = 0L
+                    val input = test.inputStream
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        total += n
+                    }
+                    val elapsed = (SystemClock.elapsedRealtime() - start).coerceAtLeast(1)
+                    kbps = total * 8 / elapsed // bytes*8 = bits, per ms -> bit/ms = kbit/s
+                } catch (_: Exception) {
+                    err = "Couldn't reach Cloudflare through the tunnel"
+                } finally {
+                    runCatching { test.disconnect() }
+                }
+            } else {
+                err = "Couldn't open a tunnel speed test stream"
+            }
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                WarpHub.update { it.copy(pingMs = pingMs, bandwidthKbps = kbps, speedTestError = err) }
+                if (err == null && pingMs != null && kbps != null) {
+                    Analytics.trackSpeedTest(pingMs, kbps)
+                } else {
+                    Analytics.trackSpeedTestFailed(err ?: "unknown")
+                }
+            }
+        }
+    }
+
+    private fun initCrashReporting() {
+        runCatching {
+            // User identifier stored anonymously — just the install UUID so you can tell them apart.
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
+                .setUserId(store.deviceId())
+        }.onFailure {
+            // Crash reporting must never block app launch.
+        }
+    }
+
     private fun startTunnel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -163,7 +250,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit) {
+private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit, onSpeedTest: () -> Unit) {
     val accent = when (state.phase) {
         Phase.CONNECTED -> Color(0xFF34D399)
         Phase.ERROR -> Color(0xFFF87171)
@@ -249,6 +336,34 @@ private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit) {
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
                 Spacer(Modifier.height(16.dp))
+            }
+
+            if (state.phase == Phase.CONNECTED) {
+                Spacer(Modifier.height(-4.dp))
+                Text(
+                    text = "SPEED TEST",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                    color = Color(0xFF38BDF8),
+                    modifier = Modifier
+                        .clickable { onSpeedTest() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                val ping = state.pingMs?.let { "${it} ms" }
+                val bw = state.bandwidthKbps?.let {
+                    if (it >= 1_000) String.format("%.1f Mbps", it / 1_000.0) else "$it Kbps"
+                }
+                val line = listOfNotNull(ping, bw).joinToString("  ·  ").ifBlank { "tap SPEED TEST to measure" }
+                val color = if (state.speedTestError != null) Color(0xFFF87171) else Color(0xFF9FB0C9)
+                Text(
+                    text = state.speedTestError ?: line,
+                    fontSize = 11.sp,
+                    color = color,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Spacer(Modifier.height(10.dp))
             }
 
             Surface(

@@ -1,8 +1,33 @@
 # WARP Connect
 
+[![Latest release](https://img.shields.io/github/v/release/sithumht/warpconnect?label=latest)](https://github.com/sithumht/warpconnect/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-3DDC84)](https://developer.android.com/about/versions/oreo)
+[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
 A one-button Android app that connects to Cloudflare WARP and keeps itself
 connected. No profile pickers, no endpoint lists, no DNS/route settings: tap
 **CONNECT**, tap again to disconnect. Everything else is automatic.
+
+## Download
+
+The latest APK is on the [Releases](https://github.com/sithumht/warpconnect/releases/latest)
+page. Sideload it (allow "Install unknown apps" for your browser or file
+manager), or install it with `adb install -r warpconnect-vX.Y.Z.apk`. Android
+8.0+, no root required. This build is distributed outside Google Play, so
+updates come from the Releases page, not the store.
+
+| | |
+|---|---|
+| **Application ID** | `com.warpconnect.app` |
+| **Contents** | `arm64-v8a`, `armeabi-v7a`, `x86_64` |
+| **Size** | ~48 MB |
+| **Signing** | Release keystore — future updates must be rebuilt with the same key |
+
+## Windows
+
+A Windows desktop build is in active development. The Go engine already
+cross-compiles to `windows/amd64` and the WinTUN bring-up is written, but it is
+not part of any release yet.
 
 The VPN engine is [warpscout](https://github.com/openwarpkit/warpscout-android)
 (MIT), compiled into a single gomobile AAR. `amneziawg-go` runs inside that AAR
@@ -108,7 +133,7 @@ On every verified connection (initial connect *and* auto-heal) the app POSTs the
 endpoint and the network profile that carried it to a Cloudflare Worker
 (`warpconnect-stats`, backed by **D1**):
 
-`POST https://warpconnect-stats.sithu-mhtvps.workers.dev/report`
+`POST https://stats.vanzconnect.online/report`
 
 ```json
 {
@@ -180,4 +205,7 @@ no third-party storage. SQL schema is applied automatically on first request
 
 ## Developed by
 
-Sithu
+Sithu ([@sithumht](https://github.com/sithumht))
+
+See the [changelog](CHANGELOG.md) for release notes.
+

@@ -24,6 +24,14 @@ data class Winner(
     val networkKey: String,
 )
 
+data class StatsRecommendation(
+    val endpoint: String,
+    val asn: String,
+    val isp: String,
+    val transport: String,
+    val savedAt: Long,
+)
+
 class Store(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -96,6 +104,98 @@ class Store(context: Context) {
             prefs.edit().putBoolean(KEY_PROFILE_ASKED, value).apply()
         }
 
+    /**
+     * Remember a failing endpoint for this network so later taps don't re-test
+     * thousands of dead candidates. Success clears the silence. The deadline
+     * keeps the silence bounded so re-verification can happen.
+     */
+    fun silenceEndpoint(networkKey: String, endpoint: String) {
+        val map = silenceMap(networkKey)
+        map[endpoint] = System.currentTimeMillis() + SILENCE_MS
+        storeSilenceMap(networkKey, map)
+    }
+
+    fun isSilenced(networkKey: String, endpoint: String): Boolean =
+        silenceMap(networkKey)[endpoint]?.takeIf { it > 0 }
+            ?.let { it > System.currentTimeMillis() } ?: false
+
+    fun unsilenceEndpoint(networkKey: String, endpoint: String) {
+        val map = silenceMap(networkKey)
+        if (map.remove(endpoint) != null) storeSilenceMap(networkKey, map)
+    }
+
+    fun silencedFor(networkKey: String): List<String> {
+        val now = System.currentTimeMillis()
+        return silenceMap(networkKey).filterValues { it == 0L || it > now }.keys.toList()
+    }
+
+    fun clearSilence(networkKey: String) {
+        prefs.edit().remove(silenceKey(networkKey)).apply()
+    }
+
+    private fun silenceKey(networkKey: String) = "silenced_$networkKey"
+
+    private fun silenceMap(networkKey: String): MutableMap<String, Long> {
+        val raw = prefs.getString(silenceKey(networkKey), null) ?: return mutableMapOf()
+        return runCatching {
+            val array = JSONObject(raw).optJSONArray("items") ?: return mutableMapOf()
+            buildMap {
+                for (i in 0 until array.length()) {
+                    val item = array.getJSONObject(i)
+                    val ep = item.optString("ep")
+                    val deadline = item.optLong("deadline")
+                    if (ep.isNotBlank()) put(ep, deadline)
+                }
+            }.toMutableMap()
+        }.getOrDefault(mutableMapOf())
+    }
+
+    private fun storeSilenceMap(networkKey: String, map: Map<String, Long>) {
+        // Drop entries whose deadline already passed so the file doesn't grow forever.
+        val now = System.currentTimeMillis()
+        val fresh = map.filterValues { it == 0L || it > now }
+        val array = JSONArray()
+        for ((ep, deadline) in fresh) {
+            array.put(JSONObject().put("ep", ep).put("deadline", deadline))
+        }
+        prefs.edit()
+            .putString(silenceKey(networkKey), JSONObject().put("items", array).toString())
+            .apply()
+    }
+
+    /**
+     * Cached community endpoint recommendation for a given transport + ASN/ISP.
+     * The stats server is usually only reachable from inside the tunnel on
+     * strict networks, so caching the last answer avoids unreachable live calls.
+     */
+    fun statsRecommendation(): StatsRecommendation? {
+        val raw = prefs.getString(KEY_STATS, null) ?: return null
+        return runCatching {
+            val json = JSONObject(raw)
+            StatsRecommendation(
+                endpoint = json.optString("endpoint"),
+                asn = json.optString("asn"),
+                isp = json.optString("isp"),
+                transport = json.optString("transport"),
+                savedAt = json.optLong("savedAt"),
+            ).takeIf {
+                it.endpoint.isNotBlank() &&
+                    it.transport.isNotBlank() &&
+                    System.currentTimeMillis() - it.savedAt < WINNER_TTL_MS
+            }
+        }.onFailure { prefs.edit().remove(KEY_STATS) }.getOrNull()
+    }
+
+    fun saveStatsRecommendation(value: StatsRecommendation) {
+        val json = JSONObject()
+            .put("endpoint", value.endpoint)
+            .put("asn", value.asn)
+            .put("isp", value.isp)
+            .put("transport", value.transport)
+            .put("savedAt", value.savedAt)
+        prefs.edit().putString(KEY_STATS, json.toString()).apply()
+    }
+
     fun clearWinner() {
         prefs.edit().remove(KEY_WINNER).remove(KEY_WINNERS).apply()
     }
@@ -165,7 +265,10 @@ class Store(context: Context) {
                     val tm = app.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                     val carrier = tm?.networkOperatorName?.trim()?.takeIf { it.isNotBlank() }
                     val mccmnc = tm?.networkOperator?.trim()?.takeIf { it.isNotBlank() }
-                    Report.Identity("cell", null, carrier, mccmnc)
+                    val country = tm?.networkCountryIso?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
+                    // Fall back to SIM carrier/country so reports keep a useful
+                    // ISP signature even when the exit-geo lookup is blocked.
+                    Report.Identity("cell", null, carrier, mccmnc, isp = carrier, country = country)
                 }
                 else -> Report.Identity(transport, null, null, null)
             }
@@ -232,11 +335,14 @@ class Store(context: Context) {
         .put("networkKey", winner.networkKey)
 
     fun deviceId(): String {
-        val existing = prefs.getString(KEY_DEVICE_ID, null)
-        if (existing != null) return existing
-        val fresh = java.util.UUID.randomUUID().toString()
-        prefs.edit().putString(KEY_DEVICE_ID, fresh).apply()
-        return fresh
+        synchronized(this) {
+            val existing = prefs.getString(KEY_DEVICE_ID, null)
+            if (existing != null) return existing
+            val fresh = java.util.UUID.randomUUID().toString()
+            // Synchronous write so a force-stop can't silently rotate the install ID.
+            prefs.edit().putString(KEY_DEVICE_ID, fresh).commit()
+            return fresh
+        }
     }
 
     fun clearDeviceId() {
@@ -249,11 +355,13 @@ class Store(context: Context) {
         const val DEFAULT_JMAX = 50
         const val DEFAULT_MTU = 1280
         const val WINNER_TTL_MS = 24L * 60 * 60 * 1000
+        const val SILENCE_MS = 6L * 60 * 60 * 1000
 
         private const val PREFS = "warpconnect"
         private const val KEY_ACCOUNT = "account"
         private const val KEY_WINNER = "winner"
         private const val KEY_WINNERS = "winners"
+        private const val KEY_STATS = "statsRecommendation"
         private const val KEY_PROFILE_ASKED = "profilePermissionsAsked"
         private const val KEY_DEVICE_ID = "deviceId"
         private const val MAX_WINNERS = 8

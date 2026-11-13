@@ -19,6 +19,9 @@ engine.git-archive/
 Thumbs.db
 desktop.ini
 
+# Firebase config — contains project IDs and OAuth client IDs; not for the repo.
+app/google-services.json
+
 engine/.gradle/
 engine/.idea/
 engine/local.properties

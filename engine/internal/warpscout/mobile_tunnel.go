@@ -12,6 +12,7 @@ import (
 
 	"github.com/amnezia-vpn/amneziawg-go/conn"
 	"github.com/amnezia-vpn/amneziawg-go/device"
+	"github.com/amnezia-vpn/amneziawg-go/tun"
 )
 
 // TunnelSpec is everything the Android VpnService needs to hand a live TUN file
@@ -23,10 +24,15 @@ type TunnelSpec struct {
 	PeerPublicKey string `json:"peerPublicKey"`
 	Endpoint      string `json:"endpoint"`
 	I1            string `json:"i1,omitempty"`
+	I2            string `json:"i2,omitempty"`
+	I3            string `json:"i3,omitempty"`
+	I4            string `json:"i4,omitempty"`
+	I5            string `json:"i5,omitempty"`
 	Jc            int    `json:"jc,omitempty"`
 	Jmin          int    `json:"jmin,omitempty"`
 	Jmax          int    `json:"jmax,omitempty"`
 	Keepalive     int    `json:"keepalive,omitempty"`
+	NoIPv6        bool   `json:"noIpv6,omitempty"`
 }
 
 type tunnelStats struct {
@@ -64,6 +70,31 @@ func tunnelUAPI(s TunnelSpec) (string, error) {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "private_key=%s\n", privHex)
+
+	// I1–I5 CPS packets are emitted before the WireGuard handshake. If the
+	// caller did not supply I2..I5, generate four random chains on the fly —
+	// the upstream AmneziaWG design expects I2..I5 to be present when an I1
+	// is, and extra noise is the entire point of the feature.
+	isAWG := s.Jc > 0 || s.I1 != ""
+	i1 := s.I1
+	i2, i3, i4, i5 := s.I2, s.I3, s.I4, s.I5
+	if isAWG && (i2 == "" || i3 == "" || i4 == "" || i5 == "") {
+		gen2, gen3, gen4, gen5, err := GenerateExtras()
+		if err == nil {
+			if i2 == "" {
+				i2 = gen2
+			}
+			if i3 == "" {
+				i3 = gen3
+			}
+			if i4 == "" {
+				i4 = gen4
+			}
+			if i5 == "" {
+				i5 = gen5
+			}
+		}
+	}
 	if s.Jc > 0 {
 		fmt.Fprintf(&b, "jc=%d\n", s.Jc)
 	}
@@ -73,14 +104,28 @@ func tunnelUAPI(s TunnelSpec) (string, error) {
 	if s.Jmax > 0 {
 		fmt.Fprintf(&b, "jmax=%d\n", s.Jmax)
 	}
-	if s.I1 != "" {
-		fmt.Fprintf(&b, "i1=%s\n", s.I1)
+	if i1 != "" {
+		fmt.Fprintf(&b, "i1=%s\n", i1)
+	}
+	if i2 != "" {
+		fmt.Fprintf(&b, "i2=%s\n", i2)
+	}
+	if i3 != "" {
+		fmt.Fprintf(&b, "i3=%s\n", i3)
+	}
+	if i4 != "" {
+		fmt.Fprintf(&b, "i4=%s\n", i4)
+	}
+	if i5 != "" {
+		fmt.Fprintf(&b, "i5=%s\n", i5)
 	}
 	fmt.Fprintf(&b, "replace_peers=true\n")
 	fmt.Fprintf(&b, "public_key=%s\n", pubHex)
 	fmt.Fprintf(&b, "endpoint=%s\n", s.Endpoint)
 	fmt.Fprintf(&b, "allowed_ip=0.0.0.0/0\n")
-	fmt.Fprintf(&b, "allowed_ip=::/0\n")
+	if !s.NoIPv6 {
+		fmt.Fprintf(&b, "allowed_ip=::/0\n")
+	}
 	keepaliveInterval := s.Keepalive
 	if keepaliveInterval <= 0 {
 		keepaliveInterval = keepalive
@@ -89,42 +134,41 @@ func tunnelUAPI(s TunnelSpec) (string, error) {
 	return b.String(), nil
 }
 
-// TunnelUp attaches amneziawg-go to an already-configured Android TUN fd. The fd
-// is configured by VpnService.Builder, so no ioctl is performed here -
-// CreateUnmonitoredTUNFromFD is the same entry point the official AmneziaWG
-// Android backend uses.
-//
-// Ownership of tunFD transfers to this function on entry: on success it is
-// closed by TunnelDown, and on every error path it is closed before returning.
-// The caller must therefore never close it again after handing it over, or it
-// could close a recycled descriptor number.
-func TunnelUp(specJSON string, tunFD int) (string, error) {
-	if tunFD <= 0 {
-		return "", errors.New("invalid tun fd")
-	}
+// parseTunnelSpec validates the JSON the caller handed us. Everything that
+// consumes a spec (mobile fd path and desktop bring-up) funnels through here
+// so error messages stay identical.
+func parseTunnelSpec(specJSON string) (TunnelSpec, error) {
 	var spec TunnelSpec
 	if err := json.Unmarshal([]byte(specJSON), &spec); err != nil {
-		closeTunFD(tunFD)
-		return "", fmt.Errorf("invalid tunnel spec: %w", err)
+		return TunnelSpec{}, fmt.Errorf("invalid tunnel spec: %w", err)
 	}
+	if strings.TrimSpace(spec.PrivateKey) == "" {
+		return TunnelSpec{}, errors.New("missing private key")
+	}
+	if strings.TrimSpace(spec.PeerPublicKey) == "" {
+		return TunnelSpec{}, errors.New("missing peer public key")
+	}
+	if strings.TrimSpace(spec.Endpoint) == "" {
+		return TunnelSpec{}, errors.New("missing endpoint")
+	}
+	return spec, nil
+}
+
+// startTunnel attaches an already-created TUN device to amneziawg-go, applies the
+// UAPI config and marks it as the live tunnel. On every error path the device is
+// closed; the caller decides what happens to the adapter (the desktop path also
+// tears down routes).
+func startTunnel(spec TunnelSpec, tunDev tun.Device) (string, error) {
 	uapi, err := tunnelUAPI(spec)
 	if err != nil {
-		closeTunFD(tunFD)
+		_ = tunDev.Close()
 		return "", err
 	}
-
 	liveTunnelMu.Lock()
 	defer liveTunnelMu.Unlock()
 	if liveTunnel != nil {
 		liveTunnel.Close()
 		liveTunnel = nil
-	}
-	tunDev, _, err := openTUNDevice(tunFD)
-	if err != nil {
-		// CreateUnmonitoredTUNFromFD only fails before it takes ownership, so
-		// the descriptor is still ours to close here.
-		closeTunFD(tunFD)
-		return "", fmt.Errorf("attach tun: %w", err)
 	}
 	dev := device.NewDevice(tunDev, conn.NewStdNetBind(), device.NewLogger(device.LogLevelSilent, ""))
 	if err := dev.IpcSet(uapi); err != nil {
@@ -140,6 +184,62 @@ func TunnelUp(specJSON string, tunFD int) (string, error) {
 	return tunnelStatsJSON(dev)
 }
 
+// TunnelUp attaches amneziawg-go to an already-configured Android TUN fd. The fd
+// is configured by VpnService.Builder, so no ioctl is performed here -
+// CreateUnmonitoredTUNFromFD is the same entry point the official AmneziaWG
+// Android backend uses.
+//
+// Ownership of tunFD transfers to this function on entry: on success it is
+// closed by TunnelDown, and on every error path it is closed before returning.
+// The caller must therefore never close it again after handing it over, or it
+// could close a recycled descriptor number.
+func TunnelUp(specJSON string, tunFD int) (string, error) {
+	if tunFD <= 0 {
+		return "", errors.New("invalid tun fd")
+	}
+	spec, err := parseTunnelSpec(specJSON)
+	if err != nil {
+		closeTunFD(tunFD)
+		return "", err
+	}
+
+	tunDev, _, err := openTUNDevice(tunFD)
+	if err != nil {
+		// CreateUnmonitoredTUNFromFD only fails before it takes ownership, so
+		// the descriptor is still ours to close here.
+		closeTunFD(tunFD)
+		return "", fmt.Errorf("attach tun: %w", err)
+	}
+	return startTunnel(spec, tunDev)
+}
+
+// TunnelUpDesktop creates a host TUN adapter (WinTUN on Windows), assigns the
+// account's interface address to it, installs split routes and DNS, and attaches
+// it to amneziawg-go. The desktop counterpart of TunnelUp — it takes no fd
+// because the desktop creates its own. On failure every route and the adapter
+// are torn down again, so a half-working tunnel never survives the call.
+func TunnelUpDesktop(specJSON, interfaceIPv4 string) (string, error) {
+	spec, err := parseTunnelSpec(specJSON)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(interfaceIPv4) == "" {
+		return "", errors.New("the account holds no IPv4 address")
+	}
+	// The desktop tunnel carries IPv4 only for now; the peer gets no ::/0 route.
+	spec.NoIPv6 = true
+	tunDev, _, err := openHostTUN(interfaceIPv4, spec.Endpoint)
+	if err != nil {
+		return "", fmt.Errorf("attach tun: %w", err)
+	}
+	stats, err := startTunnel(spec, tunDev)
+	if err != nil {
+		_ = teardownHostTUN()
+		return "", err
+	}
+	return stats, nil
+}
+
 // closeTunFD closes a descriptor that has not been wrapped by a device yet.
 func closeTunFD(fd int) {
 	if fd <= 0 {
@@ -148,16 +248,16 @@ func closeTunFD(fd int) {
 	_ = os.NewFile(uintptr(fd), "tun-fd").Close()
 }
 
-// TunnelDown tears the device down and closes the TUN fd with it.
+// TunnelDown tears the device down, closes the TUN fd with it and removes any
+// host routes the desktop bring-up installed.
 func TunnelDown() error {
 	liveTunnelMu.Lock()
-	defer liveTunnelMu.Unlock()
-	if liveTunnel == nil {
-		return nil
+	if liveTunnel != nil {
+		liveTunnel.Close()
+		liveTunnel = nil
 	}
-	liveTunnel.Close()
-	liveTunnel = nil
-	return nil
+	liveTunnelMu.Unlock()
+	return teardownHostTUN()
 }
 
 // TunnelStats reports whether the peer has actually handshaked since it came up.

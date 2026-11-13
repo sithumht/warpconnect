@@ -78,6 +78,27 @@ func regenI1(o options) error {
 	return nil
 }
 
+// GenerateExtras builds four additional CPS chains (I2..I5) at tunnel bring-up.
+// Stock peers tolerate them because they decode cleanly as separate packets;
+// a DPI watcher sees up to five random-looking UDP blobs before the first
+// WireGuard message instead of one. Each chain is genuinely different — pick
+// one profile per position with its own randomly chosen host.
+func GenerateExtras() (i2, i3, i4, i5 string, err error) {
+	names := i1Profiles()
+	hosts := append([]string{}, i1Hosts...)
+	chains := make([]string, 0, 4)
+	for k := 0; k < 4; k++ {
+		profile := names[randRange(0, len(names)-1)]
+		host := hosts[randRange(0, len(hosts)-1)]
+		c, _, genErr := genI1(profile, host)
+		if genErr != nil {
+			return "", "", "", "", genErr
+		}
+		chains = append(chains, c)
+	}
+	return chains[0], chains[1], chains[2], chains[3], nil
+}
+
 func i1Profiles() []string {
 	names := make([]string, 0, len(i1Generators))
 	for name := range i1Generators {

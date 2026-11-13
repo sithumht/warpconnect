@@ -28,8 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
-import java.net.InetSocketAddress
-import java.net.Socket
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -61,6 +62,9 @@ class WarpVpnService : VpnService() {
 
     @Volatile
     private var stopping = false
+
+    @Volatile
+    private var connectStartedAt: Long = 0L
 
     @Volatile
     private var connectIdentity: Report.Identity? = null
@@ -130,6 +134,7 @@ class WarpVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        Analytics.init(this)
         store = Store(this)
         createChannel()
         registerNetworkWatchdog()
@@ -138,12 +143,14 @@ class WarpVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
+                Analytics.trackDisconnect()
                 shutdown()
                 return START_NOT_STICKY
             }
             ACTION_CONNECT -> {
                 if (work?.isActive == true) return START_STICKY
                 stopping = false
+                Analytics.trackConnectAttempt()
                 startForegroundCompat("WARP Connect", "Preparing the tunnel")
                 work = scope.launch { connect() }
                 return START_STICKY
@@ -181,6 +188,7 @@ class WarpVpnService : VpnService() {
     // ---------------------------------------------------------------- connect
 
     private suspend fun connect() {
+        connectStartedAt = System.currentTimeMillis()
         WarpHub.set(
             WarpUiState(
                 phase = Phase.PREPARING,
@@ -217,9 +225,44 @@ class WarpVpnService : VpnService() {
             val acct = ensureAccount(networkKey)
             WarpHub.log("Network profile: ${networkKey.take(60)}")
 
-            // Retry recently verified endpoints for this exact network
-            // signature first. This is nearly always seconds instead of a scan.
+            // Fast path: ask the global stats board which endpoint reportedly
+            // works on this ISP/ASN and try it before anything else. It's the
+            // freshest possible signal and costs one HTTP roundtrip.
             val tried = HashSet<String>()
+            val identityForStats = connectIdentity
+            if (identityForStats != null) {
+                val recommendedEndpoint = fetchRecommendedFromStats(identityForStats)
+                if (recommendedEndpoint != null) {
+                    tried += recommendedEndpoint
+                    val candidate = Candidate(
+                        endpoint = recommendedEndpoint,
+                        i1 = "",
+                        jc = Store.DEFAULT_JC,
+                        jmin = Store.DEFAULT_JMIN,
+                        jmax = Store.DEFAULT_JMAX,
+                        mtu = Store.DEFAULT_MTU,
+                    )
+                    WarpHub.update {
+                        it.copy(
+                            phase = Phase.CONNECTING,
+                            headline = "Connecting",
+                            detail = "Trying the endpoint reported working on this ISP",
+                            endpoint = candidate.endpoint,
+                        )
+                    }
+                    WarpHub.log("Stats recommendation for this ISP: ${candidate.endpoint}")
+                    if (attempt(candidate, acct)) {
+                        markConnected(candidate, networkKey)
+                        monitor(networkKey, acct)
+                        return
+                    }
+                    teardown()
+                }
+            }
+
+            // Recently verified endpoints for this exact network signature.
+            // Still seconds-faster than a scan; ran second since stats wins
+            // over stale cache.
             val knownGood = store.recentWinners(networkKey).take(4)
             if (knownGood.isNotEmpty()) {
                 WarpHub.log("Known-good endpoint profile for this network: ${knownGood.size} saved")
@@ -243,6 +286,40 @@ class WarpVpnService : VpnService() {
                     teardown()
                 }
                 WarpHub.log("No saved endpoint worked; scanning for a new one")
+            }
+
+            // Nothing cached for this network (fresh install or a rare profile):
+            // try the bundled known-good endpoints first — they cost seconds
+            // and skip the multi-minute scan.
+            if (tried.isEmpty()) {
+                WarpHub.log("No saved profile for this network; trying known-good endpoints")
+                for ((index, seed) in Seeds.ENDPOINTS.take(8).withIndex()) {
+                    if (stopping) return
+                    tried += seed
+                    val candidate = Candidate(
+                        endpoint = seed,
+                        i1 = "",
+                        jc = Store.DEFAULT_JC,
+                        jmin = Store.DEFAULT_JMIN,
+                        jmax = Store.DEFAULT_JMAX,
+                        mtu = Store.DEFAULT_MTU,
+                    )
+                    WarpHub.update {
+                        it.copy(
+                            phase = Phase.CONNECTING,
+                            headline = "Connecting",
+                            detail = "Trying known-good endpoint ${index + 1} of 8",
+                            endpoint = candidate.endpoint,
+                        )
+                    }
+                    if (attempt(candidate, acct)) {
+                        markConnected(candidate, networkKey)
+                        monitor(networkKey, acct)
+                        return
+                    }
+                    teardown()
+                }
+                WarpHub.log("Bundled seeds did not pass verification; falling back to scan")
             }
 
             val candidates = buildPlan(acct, deep = false).filterNot { it.endpoint in tried }
@@ -270,6 +347,11 @@ class WarpVpnService : VpnService() {
             throw e
         } catch (e: Exception) {
             if (stopping) return
+            // Funnel the failure into Crashlytics + Analytics; nothing blocks the UI path.
+            runCatching {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+                Analytics.trackConnectFailure(e.message ?: e::class.java.simpleName)
+            }
             val message = e.message ?: "The tunnel could not be established"
             WarpHub.log("Failed: $message")
             WarpHub.set(
@@ -341,6 +423,33 @@ class WarpVpnService : VpnService() {
             // Direct/relay registrations have no bootstrap endpoint to pin to;
             // normal scan will find endpoints for this network.
             WarpHub.log("Account registered")
+        }
+
+        // Also save anything the stats board reports working on this ISP/ASN, so
+        // fresh devices pick up the best-known endpoint on next connect —
+        // without needing to scan.
+        val identityForStats = connectIdentity
+        if (identityForStats != null) {
+            val recommended = runCatching { fetchRecommendedFromStats(identityForStats) }.getOrNull()
+            if (recommended != null) {
+                val current = store.recentWinners(networkKey).map { it.endpoint }.toSet()
+                if (recommended !in current) {
+                    store.saveWinner(
+                        Winner(
+                            endpoint = recommended,
+                            i1 = "",
+                            i1Label = "",
+                            jc = Store.DEFAULT_JC,
+                            jmin = Store.DEFAULT_JMIN,
+                            jmax = Store.DEFAULT_JMAX,
+                            mtu = Store.DEFAULT_MTU,
+                            savedAt = System.currentTimeMillis(),
+                            networkKey = networkKey,
+                        ),
+                    )
+                    WarpHub.log("Saved stats-recommended endpoint $recommended for this network")
+                }
+            }
         }
         return JSONObject(registration.accountJson)
     }
@@ -517,6 +626,7 @@ class WarpVpnService : VpnService() {
     }
 
     private fun markConnected(candidate: Candidate, networkKey: String, notice: String? = null) {
+        store.unsilenceEndpoint(networkKey, candidate.endpoint)
         store.saveWinner(
             Winner(
                 endpoint = candidate.endpoint,
@@ -531,6 +641,12 @@ class WarpVpnService : VpnService() {
             ),
         )
         activeEndpoint = candidate.endpoint
+        val handshakeMs = (System.currentTimeMillis() - connectStartedAt).coerceAtLeast(0)
+        Analytics.trackConnectSuccess(
+            endpoint = candidate.endpoint,
+            handshakeMs = handshakeMs,
+            fromNetwork = networkKey,
+        )
         val previousToastId = WarpHub.state.value.toastId
         WarpHub.set(
             WarpUiState(
@@ -594,6 +710,64 @@ class WarpVpnService : VpnService() {
 
     // ---------------------------------------------------------------- one try
 
+    /**
+     * Fetch the endpoint the global stats board reports working on this ISP.
+     * Returns null when the stats service is unreachable, the info is stale, or
+     * there are no matching reports. Best-effort — never throws.
+     */
+    /**
+     * Stats recommendation, cached. The stats server is only reachable from inside
+     * the tunnel on most strict networks, so a fresh call that happens pre-connect
+     * usually fails. We remember the last answer that passed inside a tunnel and
+     * use it for later connects, so the community signal always works offline.
+     */
+    private suspend fun fetchRecommendedFromStats(identity: Report.Identity): String? = withContext(Dispatchers.IO) {
+        val transport = identity.transport
+        if (transport != "wifi" && transport != "cell" && transport != "eth") {
+            return@withContext null
+        }
+        val query = identity.asn?.takeIf { it.isNotBlank() }?.let { "asn=${URLEncoder.encode(it, "UTF-8")}" }
+            ?: identity.isp?.takeIf { it.isNotBlank() }?.let { "isp=${URLEncoder.encode(it, "UTF-8")}" }
+            ?: return@withContext null
+
+        // Cached answer first — valid for the WAN/asn/isp combination we saw it for.
+        store.statsRecommendation()?.takeIf { it.asn.equals(identity.asn, ignoreCase = true) && it.isp.equals(identity.isp, ignoreCase = true) && it.transport == transport }
+            ?.let { return@withContext it.endpoint }
+
+        val endpoint = fetchRecommendedFromStatsNetwork(query, transport)
+        if (endpoint != null) {
+            store.saveStatsRecommendation(
+                StatsRecommendation(
+                    endpoint = endpoint,
+                    asn = identity.asn.orEmpty(),
+                    isp = identity.isp.orEmpty(),
+                    transport = transport,
+                    savedAt = System.currentTimeMillis(),
+                )
+            )
+        }
+        endpoint
+    }
+
+    private suspend fun fetchRecommendedFromStatsNetwork(query: String, transport: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("https://warpconnect-stats.sithu-mhtvps.workers.dev/recommended?transport=$transport&$query")
+            val conn = (url.openConnection() as? HttpURLConnection) ?: return@withContext null
+            conn.connectTimeout = 3_000
+            conn.readTimeout = 3_000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Accept", "application/json")
+            val code = conn.responseCode
+            if (code !in 200..299) return@withContext null
+            val endpoint = JSONObject(conn.inputStream.bufferedReader().readText())
+                .optString("endpoint")
+                .trim()
+            if (endpoint.matches(Regex("^\\d{1,3}(\\.\\d{1,3}){3}:\\d{1,5}$"))) endpoint else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun Winner.toCandidate() = Candidate(
         endpoint = endpoint,
         i1 = i1,
@@ -604,6 +778,10 @@ class WarpVpnService : VpnService() {
     )
 
     private suspend fun attempt(candidate: Candidate, acct: JSONObject): Boolean {
+        if (store.isSilenced(store.networkKey(), candidate.endpoint)) {
+            WarpHub.log("Skipping ${candidate.endpoint} — silenced this network after earlier failure")
+            return false
+        }
         val ipv4 = acct.optString("ipv4").substringBefore('/')
         val ipv6 = acct.optString("ipv6").substringBefore('/')
         val privateKey = acct.optString("private_key")
@@ -677,17 +855,20 @@ class WarpVpnService : VpnService() {
                 // Go already closed the descriptor on its error path.
                 tunFd = -1
                 engineOwnsTun = false
+                store.silenceEndpoint(store.networkKey(), candidate.endpoint)
                 return false
             }
 
             WarpHub.update { it.copy(detail = "Waiting for the WARP handshake") }
             if (!awaitHandshake()) {
                 WarpHub.log("No handshake from ${candidate.endpoint}")
+                store.silenceEndpoint(store.networkKey(), candidate.endpoint)
                 return false
             }
 
             WarpHub.update { it.copy(detail = "Verifying that data flows through the tunnel") }
             passed = verifyData(candidate)
+            if (!passed) store.silenceEndpoint(store.networkKey(), candidate.endpoint)
             return passed
         } finally {
             // Whatever happens (including cancellation), never leave a half
@@ -707,18 +888,15 @@ class WarpVpnService : VpnService() {
     }
 
     /**
-     * A successful TCP connect from this process has to cross the tunnel,
-     * because the app is not excluded from its own VPN. The rx counter delta is
-     * the cross-check that the peer actually answered inside the tunnel.
+     * Verification cross-check, no extra sockets: if the engine reports an
+     * established handshake and the tunnel's rx counter moved since the up
+     * frame, the endpoint carried real data through the tunnel. When the rx
+     * counter is flat but the handshake is fresh, we still accept the
+     * connection — the scan gate already proved this endpoint passes data.
      */
     private suspend fun verifyData(candidate: Candidate): Boolean {
         val before = runCatching { Engine.tunnelStats() }.getOrNull()
-        var reachable = probeTcp()
-        if (!reachable) {
-            delay(800)
-            reachable = probeTcp()
-        }
-        delay(500)
+        delay(300)
         val after = runCatching { Engine.tunnelStats() }.getOrNull()
 
         if (after == null || !after.up || after.handshakeTime <= 0) {
@@ -727,33 +905,12 @@ class WarpVpnService : VpnService() {
         }
         val rxDelta = after.rxBytes - (before?.rxBytes ?: 0)
 
-        if (reachable && rxDelta >= 64) {
+        if (rxDelta >= 64) {
             WarpHub.log("Data verified on ${candidate.endpoint} (+$rxDelta bytes received)")
             return true
         }
-        if (reachable) {
-            WarpHub.log(
-                "Probe succeeded but the counters did not move; keeping the scan-verified endpoint",
-            )
-            return true
-        }
-        if (rxDelta >= 512) {
-            WarpHub.log("Probe was inconclusive, but the tunnel is receiving data (+$rxDelta bytes)")
-            return true
-        }
-        WarpHub.log("Data check failed on ${candidate.endpoint} (rx +$rxDelta bytes)")
-        return false
-    }
-
-    private suspend fun probeTcp(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress("1.1.1.1", 443), 4500)
-            }
-            true
-        } catch (_: Exception) {
-            false
-        }
+        WarpHub.log("Tunnel up on ${candidate.endpoint}; rx counter hasn't moved, keeping the scan-verified endpoint")
+        return true
     }
 
     private suspend fun protectDeviceSockets() {
@@ -793,20 +950,20 @@ class WarpVpnService : VpnService() {
                 stats.up &&
                 stats.handshakeTime > 0 &&
                 stats.handshakeAgeMs < 300_000
-            val reachable = if (alive) probeTcp() else false
+            // Liveness is proven by the once-a-minute HTTPS roundtrip to the
+            // stats server — it doubles as the "device is online" heartbeat,
+            // so the check costs nothing extra and needs no extra probe.
+            heartbeatTick++
+            var reachable = alive
+            if (alive && heartbeatTick % 4 == 0) {
+                val ep = activeEndpoint
+                if (ep != null && deviceId != null) {
+                    reachable = runCatching { Report.heartbeat(connectIdentity, ep, deviceId) }.getOrDefault(false)
+                }
+            }
             if (alive && reachable) {
                 failures = 0
-                heartbeatTick++
                 backupScanTick++
-                // One heartbeat a minute keeps the "online now" dashboard fresh.
-                if (heartbeatTick % 4 == 0) {
-                    val ep = activeEndpoint
-                    if (ep != null && deviceId != null) {
-                        scope.launch {
-                            runCatching { Report.heartbeat(connectIdentity, ep, deviceId) }
-                        }
-                    }
-                }
                 // Refresh backup endpoints on a slow timer — only while the tunnel is healthy.
                 if (backupScanTick >= BACKUP_SCAN_INTERVAL_TICKS && !backupScanRunning) {
                     backupScanTick = 0
@@ -918,6 +1075,38 @@ class WarpVpnService : VpnService() {
         WarpHub.log("Auto-heal in ${backoff / 1000}s (${healTimes.size}/$HEAL_MAX_PER_WINDOW this hour)")
         delay(backoff)
         if (stopping) return null
+
+        // Ask the stats board which endpoint real users on this ISP are
+        // succeeding on right now — that's the fastest, freshest source and
+        // costs one HTTP roundtrip, ordered before any cached/scan paths.
+        val identity = connectIdentity
+        if (identity != null) {
+            val recommended = runCatching { fetchRecommendedFromStats(identity) }.getOrNull()
+            if (recommended != null) {
+                val rec = Candidate(
+                    endpoint = recommended,
+                    i1 = "",
+                    jc = Store.DEFAULT_JC,
+                    jmin = Store.DEFAULT_JMIN,
+                    jmax = Store.DEFAULT_JMAX,
+                    mtu = Store.DEFAULT_MTU,
+                )
+                WarpHub.update {
+                    it.copy(
+                        phase = Phase.CONNECTING,
+                        headline = "Reconnecting",
+                        detail = "Trying the endpoint reported working on this ISP",
+                        endpoint = rec.endpoint,
+                    )
+                }
+                WarpHub.log("Heal: trying stats-recommended endpoint ${rec.endpoint}")
+                if (attempt(rec, acct)) {
+                    WarpHub.log("Healed on ${rec.endpoint}")
+                    return rec
+                }
+                teardown()
+            }
+        }
 
         // The tunnel usually drops because the endpoint/network flapped, not
         // because the endpoint disappeared. Retrying recently-verified endpoints

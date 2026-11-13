@@ -1,5 +1,9 @@
-//go:build !linux
+﻿//go:build !linux && !windows
 
+// The mobile_tun_other.go shim used to hard-error on non-Linux hosts. We no
+// longer need it now that Windows has its own implementation; any host that is
+// neither Linux-family nor Windows gets a blunt "not supported" error, just
+// like before.
 package warpscout
 
 import (
@@ -8,8 +12,6 @@ import (
 	"github.com/amnezia-vpn/amneziawg-go/tun"
 )
 
-// openTUNDevice only has a real implementation on Android/Linux. The desktop
-// build exists so the engine can still be compiled and tested on the host.
 func openTUNDevice(int) (tun.Device, string, error) {
-	return nil, "", errors.New("attaching a VpnService tun fd is only supported on Android")
+	return nil, "", errors.New("attaching a desktop TUN device is only supported on Windows (see mobile_tun_windows.go)")
 }
