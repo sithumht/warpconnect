@@ -13,7 +13,8 @@ connected. No profile pickers, no endpoint lists, no DNS/route settings: tap
 ## Download
 
 The latest APK is on the [Releases](https://github.com/sithumht/warpconnect/releases/latest)
-page. Sideload it (allow "Install unknown apps" for your browser or file
+page — or on the **[WARP Connect website](https://warpconnect-site.sithu-mhtvps.workers.dev/)**
+(English / မြန်မာ). Sideload it (allow "Install unknown apps" for your browser or file
 manager), or install it with `adb install -r warpconnect-vX.Y.Z.apk`. Android
 8.0+, no root required. This build is distributed outside Google Play, so
 updates come from the Releases page, not the store.

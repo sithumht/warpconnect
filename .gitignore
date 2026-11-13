@@ -28,3 +28,7 @@ engine/local.properties
 engine/android/build/
 engine/android/app/build/
 engine/.cache/
+
+# Wrangler local state (contains account metadata)
+.wrangler/
+website/.wrangler/

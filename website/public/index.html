@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="WARP Connect — a one-button Cloudflare WARP client for Android, built for Myanmar's filtered networks (ATOM, MPT, Ooredoo, Mytel). Free, open source, no root." />
+  <meta name="theme-color" content="#080d1a" />
+  <meta property="og:title" content="WARP Connect — one tap, the open internet" />
+  <meta property="og:description" content="A one-button Cloudflare WARP client for Android, built for Myanmar's filtered networks. Free, open source, no root." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://warpconnect.sithu-mhtvps.workers.dev/" />
+  <title>WARP Connect — One tap, the open internet</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310b981'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%23080d1a'/%3E%3Ccircle cx='32' cy='32' r='13' fill='%2334d399'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#top" aria-label="WARP Connect — home">
+    <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true">
+      <circle cx="32" cy="32" r="29" fill="#10b981" />
+      <circle cx="32" cy="32" r="21.5" fill="#080d1a" />
+      <circle cx="32" cy="32" r="13" fill="#34d399" />
+    </svg>
+    <span class="brand-mark">WARP&nbsp;CONNECT</span>
+  </a>
+  <nav class="lang-switch" aria-label="Language">
+    <button class="lang-btn is-active" data-setlang="en" lang="en">English</button>
+    <button class="lang-btn" data-setlang="my" lang="my">မြန်မာ</button>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- ============ ENGLISH ============ -->
+  <div class="content lang-en" lang="en">
+
+    <section class="hero">
+      <p class="eyebrow">FREE · OPEN SOURCE · NO ROOT</p>
+
+      <div class="engine-ring" aria-hidden="true">
+        <span>CONNECT</span>
+      </div>
+
+      <h1>One tap.<br />The open internet.</h1>
+      <p class="lede">WARP Connect is a one&#8209;button Cloudflare WARP client for Android, built for Myanmar's filtered networks — <strong>ATOM, MPT, Ooredoo, Mytel</strong>. Tap CONNECT once; endpoint scanning, verification and healing are all automatic.</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sithumht/warpconnect/releases/download/v1.0.1/warpconnect-v1.0.1.apk">Download APK — v1.0.1 · 48 MB</a>
+        <a class="btn btn-ghost" href="https://github.com/sithumht/warpconnect">View source on GitHub</a>
+      </div>
+      <p class="cta-note">Android 8.0+ · <a href="https://github.com/sithumht/warpconnect/releases/tag/v1.0.1">Release notes</a> · SHA-256 <code>2e615a7e…946f827</code></p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">WHY THIS EXISTS</p>
+      <h2>The block is real. So is the way around it.</h2>
+      <p>Myanmar's networks filter traffic with DPI (Deep Packet Inspection). Sites, apps and whole services disappear — sometimes for days. WARP Connect doesn't pretend the block isn't there: it finds which WARP endpoints still pass, proves one is really carrying data, and keeps that connection alive.</p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">WHAT HAPPENS WHEN YOU TAP CONNECT</p>
+      <div class="steps">
+        <div class="step"><span class="step-n">01</span><h3>Registers once</h3><p>A throwaway WARP account is created on first run — through the API, a relay, or an in-tunnel registration. It's yours forever; no email, no phone number.</p></div>
+        <div class="step"><span class="step-n">02</span><h3>Picks a working endpoint</h3><p>Remembered per-network winners are tried first; otherwise the app scans Cloudflare's WARP endpoints and keeps the ones that survive in-tunnel tests — validated with a real handshake and a data-crossing check.</p></div>
+        <div class="step"><span class="step-n">03</span><h3>Stays connected</h3><p>If the tunnel is torn down by the network, the app notices within seconds and reconnects — usually to an endpoint that already worked on this exact network.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">SCREENSHOTS — REAL ATOM 4.5G, YANGON</p>
+      <div class="shots">
+        <figure><img src="/screenshots/ready.png" alt="WARP Connect Ready state with the activity log" width="324" loading="lazy" /><figcaption>Ready — tap to connect</figcaption></figure>
+        <figure><img src="/screenshots/preparing.png" alt="WARP Connect Preparing state" width="324" loading="lazy" /><figcaption>Preparing — loading your account</figcaption></figure>
+        <figure><img src="/screenshots/connected.png" alt="WARP Connect Connected state with 344 ms latency and 3.6 Mbps speed test" width="324" loading="lazy" /><figcaption>Connected — 344 ms · 3.6 Mbps</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">PRIVACY, STRAIGHT</p>
+      <h2>No theatre. Here is exactly what leaves your phone.</h2>
+      <ul class="plain-list">
+        <li><strong>Connection telemetry</strong> — endpoint, carrier (ATOM/…), ASN, city/country. That's all. No browsing history, no messages, no passwords, no identity.</li>
+        <li><strong>Crash and usage events</strong> — Firebase Crashlytics + Analytics, so failures get fixed.</li>
+        <li><strong>Your WARP account</strong> — a throwaway device identity in app-private storage. Never rotated, never linked to you.</li>
+        <li><strong>Open source</strong> — every line is in <a href="https://github.com/sithumht/warpconnect">the repo</a>. No hidden SDKs beyond Firebase and nothing else.</li>
+      </ul>
+    </section>
+
+    <section class="section faq">
+      <p class="eyebrow">HONEST ANSWERS</p>
+      <h2>Questions people actually ask</h2>
+      <details><summary>Why not Google Play?</summary><p>Because Play sits behind the same filter, and sideloading is how everyone in Myanmar installs this class of app today. Updates come from the Releases page. Play Protect will warn you — that's expected for any sideloaded app, not a verdict.</p></details>
+      <details><summary>Why does the first connect take minutes?</summary><p>Registration, then a scan of WARP endpoints, then verification of each survivor — that's real work on a filtered line. Every later connect reuses the per-network cache and usually wins in seconds.</p></details>
+      <details><summary>Does it work on MPT / Ooredoo / Mytel?</summary><p>It's developed and tested on ATOM. The endpoint engine is generic and the other carriers use the same Cloudflare backbone, but success is best-effort — if a network blocks every WARP endpoint, no app can make it work.</p></details>
+      <details><summary>How do I update?</summary><p>Download the new APK from the Releases page and install it over the old one. The signature is the same, so it upgrades in place. Your account survives.</p></details>
+      <details><summary>Is it free?</summary><p>Yes. No ads, no upsell, no in-app purchases. Built by one person for one market.</p></details>
+    </section>
+
+    <section class="section download-again">
+      <p class="eyebrow">READY?</p>
+      <h2>Get back the open internet.</h2>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sithumht/warpconnect/releases/download/v1.0.1/warpconnect-v1.0.1.apk">Download APK — v1.0.1</a>
+        <a class="btn btn-ghost" href="https://github.com/sithumht/warpconnect/releases/latest">All releases</a>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============ BURMESE ============ -->
+  <div class="content lang-my" lang="my">
+
+    <section class="hero">
+      <p class="eyebrow">အခမဲ့ · OPEN SOURCE · ROOT မလို</p>
+
+      <div class="engine-ring" aria-hidden="true">
+        <span>CONNECT</span>
+      </div>
+
+      <h1>ခလုတ်တစ်ခုနှိပ်ရုံဖြင့်<br />အင်တာနက်လွတ်လပ်စွာသုံးပါ</h1>
+      <p class="lede">WARP Connect သည် Android ဖုန်းအတွက်တစ်ခုတည်းခလုတ်ပါသော Cloudflare WARP VPN အက်ပ်ပါ။ <strong>ATOM, MPT, Ooredoo, Mytel</strong> စသည့် filter လုပ်ထားသော network များအတွက် ရည်ရွယ်ပါတယ်။</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sithumht/warpconnect/releases/download/v1.0.1/warpconnect-v1.0.1.apk">APK Download — v1.0.1 · 48 MB</a>
+        <a class="btn btn-ghost" href="https://github.com/sithumht/warpconnect">GitHub ပေါ်ရှိ source code</a>
+      </div>
+      <p class="cta-note">Android 8.0+ · <a href="https://github.com/sithumht/warpconnect/releases/tag/v1.0.1">Release notes</a> · မြန်မာဘာသာ လမ်းညွှန် <a href="https://github.com/sithumht/warpconnect/blob/main/README.my.md">README.my.md</a></p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">ဒီ app ကို ဘာကြောင့် ဖန်တီးခဲ့သလဲ</p>
+      <h2>အင်တာနက် block ခံရတာက အမှန်ပါ။ ဖြေရှင်းနည်းလည်း ရှိပါတယ်။</h2>
+      <p>မြန်မာနိုင်ငံ၏ network များမှာ DPI (Deep Packet Inspection) နဲ့ အင်တာနက်ကို filter လုပ်ထားတတ်ပါတယ်။ သတင်း site, Facebook, YouTube တွေ ပိတ်ခံရတတ်ပါတယ်။ WARP Connect က အဲ့ဒီလို filter လုပ်ထားတဲ့ network တွေပေါ်မှာလည်း ချိတ်ဆက်ပေးနိုင်တဲ့ အက်ပ်ပါ — WARP endpoint တွေထဲက အလုပ်လုပ်တဲ့ဟာကို ရှာဖွေ၊ စမ်းသပ်ပြီး၊ တကယ်ချိတ်ဆက်မှသာ အလုပ်လုပ်ပါတယ်။</p>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">CONNECT နှိပ်လိုက်ရင် ဘာဖြစ်လဲ</p>
+      <div class="steps">
+        <div class="step"><span class="step-n">01</span><h3>အကောင့်တစ်ခု တည်ဆောက်ပါတယ်</h3><p>ပထမဆုံးအကြိမ် ဖွင့်တဲ့အခါ throwaway WARP account တစ်ခု အလိုအလျောက် ရပါတယ်။ Email, ဖုန်းနံပါတ် မလိုပါဘူး။</p></div>
+        <div class="step"><span class="step-n">02</span><h3>အလုပ်လုပ်တဲ့ endpoint ကို ရွေးပေးပါတယ်</h3><p>ကိုယ်သုံးနေတဲ့ network ပေါ်က အလုပ်လုပ်ပြီးသား endpoint ကို ဦးစွာစမ်းပါတယ်။ မဟုတ်ပါက network တစ်ခုလုံးကို scan လုပ်ပြီး endpoint တွေကို စမ်းသပ်၊ အလုပ်လုပ်ဆဲဟာကို ရွေးပေးပါတယ်။</p></div>
+        <div class="step"><span class="step-n">03</span><h3>ချိတ်ဆက်ထားတဲ့အတိုင်း နေပါတယ်</h3><p>Network က tunnel ကို ဖြတ်တောက်လိုက်ရင် စက္ကန့်ပိုင်းအတွင်း ပြန်ချိတ်ဆက်ပေးပါတယ် — များသောအားဖြင့် ဒီ network ပေါ်က အလုပ်လုပ်ပြီးသား endpoint ဆီသို့။</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">SCREENSHOT များ — ATOM 4.5G, YANGON</p>
+      <div class="shots">
+        <figure><img src="/screenshots/ready.png" alt="Ready မျက်နှာပြင်" width="324" loading="lazy" /><figcaption>Ready — နှိပ်ပြီး ချိတ်ဆက်ပါ</figcaption></figure>
+        <figure><img src="/screenshots/preparing.png" alt="Preparing မျက်နှာပြင်" width="324" loading="lazy" /><figcaption>Preparing — အကောင့် ဆောင်ရွက်နေဆဲ</figcaption></figure>
+        <figure><img src="/screenshots/connected.png" alt="ချိတ်ဆက်ပြီး 344 ms · 3.6 Mbps" width="324" loading="lazy" /><figcaption>ချိတ်ဆက်ပြီး — 344 ms · 3.6 Mbps</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">PRIVACY — တိုက်ရိုက်ပြောမယ်</p>
+      <h2>သင့်ဖုန်းထဲက ဘာထွက်သွားသလဲဆိုရင် —</h2>
+      <ul class="plain-list">
+        <li><strong>Connection telemetry</strong> — endpoint, carrier (ATOM စသည်), ASN, မြို့/နိုင်ငံ။ ဒါတွေပဲ။ သင့် browsing history, message, password မပို့ပါဘူး။</li>
+        <li><strong>Crash နှင့် usage events</strong> — Firebase Crashlytics + Analytics။ ပြဿနာများကို မြန်မြန်ပြင်နိုင်ဖို့။</li>
+        <li><strong>သင့် WARP account</strong> — app-private storage ထဲက throwaway device identity တစ်ခုပါ။ သင့်ကို တစ်ဦးအနေဖြင့် ချိတ်ဆက်မထားပါဘူး။</li>
+        <li><strong>Open source</strong> — <a href="https://github.com/sithumht/warpconnect">repo ထဲမှာ</a> code အားလုံး ကြည့်နိုင်ပါတယ်။</li>
+      </ul>
+    </section>
+
+    <section class="section faq">
+      <p class="eyebrow">တကယ့်မေးခွန်းများ</p>
+      <h2>လူတွေ တကယ်မေးကြတဲ့မေးခွန်းများ</h2>
+      <details><summary>ဘာလို့ Google Play မှာမတင်ထားတာလဲ?</summary><p>Play ကလည်း filter အောက်မှာရှိလို့ပါ။ Myanmar မှာ APK နည်းနဲ့ တပ်ဆင်တာက ယနေ့အတွက် ပုံမှန်ပါ။ Update တွေက Releases page ကနေ download လုပ်ရပါတယ်။ Play Protect သတိပေးတာက ပုံမှန်ပါ — sideloaded app မဆို သတိပေးပါတယ်။</p></details>
+      <details><summary>ပထမဆုံး ချိတ်ဆက်မှု ဘာလို့ ကြာတာလဲ?</summary><p>Account တည်ဆောက်၊ endpoint တွေ စကန်စစ်၊ ချိတ်ဆက်နိုင်တာတွေကို စမ်းသပ် — အလုပ်နဲ့ အချိန်ပေးရပါတယ်။ နောက်ပိုင်း ချိတ်ဆက်မှုတွေကတော့ network cache ကြောင့် စက္ကန့်ပိုင်းနဲ့ ရပါတယ်။</p></details>
+      <details><summary>MPT / Ooredoo / Mytel မှာ အလုပ်လုပ်လား?</summary><p>ATOM ပေါ်မှာ develop နှင့် စမ်းသပ်ထားပါတယ်။ MPT, Ooredoo, Mytel မှာလည်း Cloudflare backbone တူတာကြောင့် အလုပ်လုပ်နိုင်ပါတယ် — ဒါပေမယ့် WARP endpoint အားလုံးကို block လုပ်ထားတဲ့ network မှာတော့ ဘယ် app မှ မလုပ်နိုင်ပါဘူး။</p></details>
+      <details><summary>Update ဘယ်လိုလုပ်ရမလဲ?</summary><p>Releases page က APK အသစ်ကို download ပြီး ဟောင်းပေါ်မှာ ထပ် install လုပ်ပါ။ Signature တူတဲ့အတွက် သာမာန် install ရပါတယ်။ Account မပျောက်ပါဘူး။</p></details>
+      <details><summary>အခမဲ့လား?</summary><p>ဟုတ်ကဲ့၊ အခမဲ့ပါ။ Ads မရှိပါဘူး၊ in-app purchase မရှိပါဘူး။ လူတစ်ယောက်က နိုင်ငံတစ်ခုအတွက် လုပ်ထားတဲ့ app ပါ။</p></details>
+    </section>
+
+    <section class="section download-again">
+      <p class="eyebrow">အဆင်သင့်ရှိလား?</p>
+      <h2>အင်တာနက်လွတ်လပ်မှုကို ပြန်ရယူပါ။</h2>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sithumht/warpconnect/releases/download/v1.0.1/warpconnect-v1.0.1.apk">APK Download — v1.0.1</a>
+        <a class="btn btn-ghost" href="https://github.com/sithumht/warpconnect/releases">Releases အားလုံး</a>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<footer class="footer">
+  <p class="footer-mark">WARP&nbsp;CONNECT</p>
+  <p class="footer-line">Developed by <a href="https://github.com/sithumht">Sithu</a> · Engine: <a href="https://github.com/openwarpkit/warpscout-android">warpscout</a> (MIT) · <a href="https://github.com/amnezia-vpn/amneziawg-go">amneziawg-go</a> (MIT)</p>
+  <p class="footer-line muted">WARP Connect is an independent app, not affiliated with Cloudflare, Inc. WARP is a trademark of Cloudflare. · <a href="https://github.com/sithumht/warpconnect">Source on GitHub</a> · <a href="https://github.com/sithumht/warpconnect/issues">Report an issue</a></p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
