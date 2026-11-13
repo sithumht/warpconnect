@@ -4,6 +4,8 @@
 [![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-3DDC84)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
+[**မြန်မာဘာသာ လမ်းညွှန် (အင်တာနက် တပ်ဆင်နည်း၊ FAQ) →**](README.my.md)
+
 A one-button Android app that connects to Cloudflare WARP and keeps itself
 connected. No profile pickers, no endpoint lists, no DNS/route settings: tap
 **CONNECT**, tap again to disconnect. Everything else is automatic.
