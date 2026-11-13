@@ -32,6 +32,22 @@ is live. The worker serves it at `https://warpconnect-bot.<subdomain>.workers.de
 
 KV namespace: `BOT_KV` (id `fc42c9dd1072409e998088f13e7529ec`).
 
+## Profile & UX (applied, reproducible)
+
+**UX (worker):** `/start` greets by first name (`မင်္ဂလာပါ <name>`) and attaches a
+persistent reply keyboard — `⬇️ Download APK · 🔑 SHA-256 · 📖 Install Guide (မြန်မာ) ·
+🌐 Website` — no commands to memorize; unknown messages re-attach it. Keyboard
+buttons arrive as plain text and are matched verbatim in the handler.
+
+**Profile (Bot API, `language_code` `en` and `my`):**
+- Name (my): `WARP Connect မြန်မာ` — default name left as `Warp Connect Bot - Official` (anti-impersonation)
+- Description + short description (en/my) — full install flow, APK privacy lines, site + source links
+- Command menu (en/my): `/start`, `/apk`, `/sha`, `/help`
+
+**Avatar:** the app launcher icon, rasterized to JPG — `docs/brand/warpconnect-icon-512.jpg`
+(see repo root `docs/brand/`). To re-apply everything, use the JSON payloads from
+git history or recreate them following the same shapes and `language_code`.
+
 ## Deploy
 
 ```powershell

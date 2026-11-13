@@ -74,6 +74,21 @@ function helpText() {
   ].join("\n");
 }
 
+// A persistent reply keyboard — no commands to memorize. Row texts are
+// matched verbatim in the fetch handler, keep them in sync.
+const REPLY_KEYBOARD = {
+  keyboard: [
+    [{ text: "⬇️ Download APK" }, { text: "🔑 SHA-256" }],
+    [{ text: "📖 Install Guide (မြန်မာ)" }, { text: "🌐 Website" }],
+  ],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
+const REPO_GUIDE_EN = `https://github.com/${REPO}/blob/main/README.md`;
+const REPO_GUIDE_MY = `https://github.com/${REPO}/blob/main/README.my.md`;
+const SITE = "https://site.vanzconnect.online/";
+
 async function tg(env, method, payload) {
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
@@ -92,8 +107,14 @@ async function tg(env, method, payload) {
   }
 }
 
-async function sendText(env, chatId, text) {
-  return tg(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true });
+async function sendText(env, chatId, text, replyMarkup) {
+  return tg(env, "sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
 }
 
 async function sendApk(env, chatId) {
@@ -162,7 +183,10 @@ async function sendSha(env, chatId) {
   try {
     const release = await fetchLatestRelease(env);
     const asset = findApkAsset(release);
-    if (!asset) return sendText(env, chatId, `Latest release has no APK yet.\nManual: ${RELEASES_PAGE}`);
+    if (!asset) {
+      await sendText(env, chatId, `Latest release has no APK yet.\nManual: ${RELEASES_PAGE}`);
+      return ok();
+    }
     const sha = releaseSha256(release) || "(SHA-256 not found in release notes)";
     const size = asset.size ? `~${Math.round(asset.size / 1024 / 1024)} MB` : "";
     await sendText(env, chatId, `<b>${asset.name}</b> ${size}\nSHA-256 <code>${sha}</code>\nVerify: <code>Get-FileHash</code> သို့ sha256sum`);
@@ -202,13 +226,22 @@ export default {
     if (!msg || !msg.chat || typeof msg.text !== "string") return ok();
 
     const chatId = msg.chat.id;
+    const firstName = (msg.from && msg.from.first_name ? String(msg.from.first_name) : "").trim() || "friend";
     const raw = msg.text.trim().split(/\s+/)[0].toLowerCase();
     const command = raw.split("@")[0];
+    const original = msg.text.trim();
 
     try {
       switch (command) {
         case "/start":
-          await sendText(env, chatId, `${helpText()}\n\nမင်္ဂလာပါ — APK ကို အောက်မှာ ပေးထားပါတယ် 👇`);
+          await sendText(
+            env,
+            chatId,
+            `<b>မင်္ဂလာပါ ${firstName}</b> 🙏\n` +
+              `တစ်ချက်နှိပ်ရုံဖြင့် အင်တာနက် — ATOM / MPT / Ooredoo / Mytel အတွက်။\n\n` +
+              `ခလုတ်များနှိပ်၍လည်း အလုပ်လုပ်ပါတယ် ⬇️`,
+            REPLY_KEYBOARD,
+          );
           return sendApk(env, chatId);
         case "/apk":
         case "/download":
@@ -217,9 +250,29 @@ export default {
         case "/checksum":
           return sendSha(env, chatId);
         case "/help":
-          return sendText(env, chatId, helpText());
+          await sendText(env, chatId, helpText(), REPLY_KEYBOARD);
+          return ok();
         default:
-          return sendText(env, chatId, `Commands: /start · /apk · /sha · /help\nမြန်မာဘာသာ လမ်းညွှန်: https://github.com/${REPO}/blob/main/README.my.md`);
+          // Reply-keyboard buttons arrive as plain text — match them exactly.
+          if (original === "⬇️ Download APK") return sendApk(env, chatId);
+          if (original === "🔑 SHA-256") return sendSha(env, chatId);
+          if (original === "📖 Install Guide (မြန်မာ)") {
+            await sendText(
+              env,
+              chatId,
+              `<b>Install Guide</b>\n` +
+                `မြန်မာဘာသာ: <a href="${REPO_GUIDE_MY}">README.my.md</a> (recommended)\n` +
+                `English: <a href="${REPO_GUIDE_EN}">README.md</a>\n\n` +
+                `In 30 seconds: download the APK → tap it → Allow "Install unknown apps" → open → CONNECT.`,
+            );
+            return ok();
+          }
+          if (original === "🌐 Website") {
+            await sendText(env, chatId, `<b>WARP Connect</b>\n${SITE}\nမြန်မာဘာသာ / English — download, guides, everything.`);
+            return ok();
+          }
+          await sendText(env, chatId, `Buttons below — or /start · /apk · /sha · /help\nမြန်မာဘာသာ လမ်းညွှန်: ${REPO_GUIDE_MY}`, REPLY_KEYBOARD);
+          return ok();
       }
     } catch (e) {
       console.log("handler exception", String(e));
