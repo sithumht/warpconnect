@@ -18,6 +18,7 @@ namespace WarpConnect {
         private bool _sequenceRunning;
         private OutboundReport? _connectIdentity;
         private TunnelInfo? _networkInfo;
+        private System.Threading.Tasks.Task<TunnelInfo>? _preTunnelTask;
         private volatile string _activeEndpoint = "";
 
         public MainWindow() {
@@ -45,7 +46,7 @@ namespace WarpConnect {
                     if (_state == UiState.Connected && !string.IsNullOrEmpty(_settings.DeviceId)) {
                         _heartbeatTicks++;
                         if (_heartbeatTicks % 40 == 0) { // ≈60s heartbeat
-                            var id = _connectIdentity ?? new OutboundReport { Transport = "eth" };
+                            var id = _connectIdentity ?? BuildIdentity(_networkInfo);
                             var ep = _settings.LastEndpoint ?? "";
                             var dev = _settings.DeviceId;
                             _ = Report.Heartbeat(id, ep, dev);
@@ -380,6 +381,9 @@ namespace WarpConnect {
 
         private void ConnectSequenceInner() {
             try {
+                // Fresh pre-tunnel lookup — routes are untouched at this point,
+                // so the stats identity reflects the real line, not the VPN exit.
+                RefreshPreTunnelInfoAsync();
                 if (!_engine.IsAvailable) {
                     Ui(delegate { AppendLog("warpscout.exe is missing from this install folder — reinstall WARP Connect."); ApplyState(UiState.Failed); });
                     return;
@@ -507,7 +511,9 @@ namespace WarpConnect {
         // is not the user's network, and the stats dashboard aggregates by line.
         private async void RefreshPreTunnelInfoAsync() {
             try {
-                var info = await Net.FetchTunnelInfoAsync();
+                var t = Net.FetchTunnelInfoAsync();
+                _preTunnelTask = t;
+                var info = await t;
                 _networkInfo = info;
                 Dispatcher.Invoke(delegate {
                     if (!info.Ok) {
@@ -529,7 +535,25 @@ namespace WarpConnect {
         }
 
 
+        // Resolve to the raw line's identity — never the VPN exit. Awaits any
+        // lookup still in flight (capped) so the stats uplink never ships an
+        // empty ISP/ASN just because the user tapped CONNECT early.
+        private async System.Threading.Tasks.Task<TunnelInfo?> EnsureNetworkInfoAsync() {
+            if (_networkInfo != null && _networkInfo.Ok) return _networkInfo;
+            var t = _preTunnelTask;
+            if (t != null) {
+                try {
+                    var done = await System.Threading.Tasks.Task.WhenAny(t, System.Threading.Tasks.Task.Delay(7000));
+                    if (done == t && t.IsCompleted && !t.IsFaulted && t.Result != null && t.Result.Ok) _networkInfo = t.Result;
+                } catch { }
+            }
+            return _networkInfo;
+        }
+
         private async System.Threading.Tasks.Task MaybeReport(OutboundReport id, string endpoint) {
+            if (string.IsNullOrEmpty(id.Asn) && string.IsNullOrEmpty(id.Isp)) {
+                AppendLogSafe("network info missing — stats will have empty ISP/ASN fields (lookup failed on this line)");
+            }
             _connectIdentity = id;
             _heartbeatTicks = 0;
             var ep = endpoint;
@@ -537,6 +561,9 @@ namespace WarpConnect {
             try { await Report.SubmitReport(id, ep); } catch { }
             try { await Report.Heartbeat(id, ep, dev); } catch { }
             AppendLogSafe("Stats reported (endpoint: " + ep + ").");
+            if (!string.IsNullOrEmpty(id.Asn)) {
+                AppendLogSafe("Sent network: " + id.Asn + " · " + id.AsnOrg + " · " + id.Country + ((id.City ?? "") == "" ? "" : " · " + id.City));
+            }
         }
 
         private async void ByeStats() {
@@ -606,13 +633,14 @@ namespace WarpConnect {
 
         // ---------- On tunnel up ----------
 
-        private void OnTunnelUp() {
+        private async void OnTunnelUp() {
             var ep = string.IsNullOrEmpty(_activeEndpoint) ? (_settings.LastEndpoint ?? "") : _activeEndpoint;
             Ui(delegate {
                 ApplyState(UiState.Connected);
                 AppendLog("WARP tunnel is up — IPv4 traffic now exits through " + ep);
             });
-            var identity = BuildIdentity(_networkInfo);
+            var info = await EnsureNetworkInfoAsync();
+            var identity = BuildIdentity(info);
             // latency through the tunnel = the browsing path the user just got
             System.Threading.ThreadPool.QueueUserWorkItem(delegate {
                 var ms = Net.PingMs("1.1.1.1", 2500);
