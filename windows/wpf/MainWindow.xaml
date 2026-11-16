@@ -1,0 +1,244 @@
+﻿<Window x:Class="WarpConnect.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        Title="WARP Connect"
+        Width="440" Height="760"
+        MinWidth="440" MinHeight="760"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize"
+        WindowStyle="None"
+        Background="#0B1220"
+        MouseDown="Window_MouseDown"
+        KeyboardNavigation.DirectionalNavigation="Cycle">
+
+    <Window.Resources>
+        <RadialGradientBrush x:Key="CardOuterGlow" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.75" RadiusY="0.75">
+            <GradientStop Color="#152444" Offset="0" />
+            <GradientStop Color="#0B1220" Offset="1" />
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="DiscBlueGlow" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.9" RadiusY="0.9">
+            <GradientStop Color="#38BDF8" Offset="0.2" />
+            <GradientStop Color="#0EA5E9" Offset="0.6" />
+            <GradientStop Color="#075985" Offset="1" />
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="DiscGreenGlow" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.9" RadiusY="0.9">
+            <GradientStop Color="#6FFFD4" Offset="0.15" />
+            <GradientStop Color="#34D399" Offset="0.55" />
+            <GradientStop Color="#047857" Offset="1" />
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="DiscAmberGlow" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.9" RadiusY="0.9">
+            <GradientStop Color="#FFE873" Offset="0.15" />
+            <GradientStop Color="#FBBF24" Offset="0.55" />
+            <GradientStop Color="#B45309" Offset="1" />
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="DiscRedGlow" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.9" RadiusY="0.9">
+            <GradientStop Color="#FF8A8A" Offset="0.15" />
+            <GradientStop Color="#F87171" Offset="0.55" />
+            <GradientStop Color="#B91C1C" Offset="1" />
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="AmbientGlow" GradientOrigin="0.5,0.35" Center="0.5,0.35" RadiusX="0.9" RadiusY="0.55">
+            <GradientStop Color="#10304A" Offset="0" />
+            <GradientStop Color="#0B1220" Offset="1" />
+        </RadialGradientBrush>
+
+        <LinearGradientBrush x:Key="BackgroundGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#05070F" Offset="0" />
+            <GradientStop Color="#090F1F" Offset="0.35" />
+            <GradientStop Color="#0E1830" Offset="0.72" />
+            <GradientStop Color="#101E38" Offset="1" />
+        </LinearGradientBrush>
+
+        <Style x:Key="WindowCloseButton" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#A9B8CF" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#2A1215" />
+                                <Setter Property="Foreground" Value="#FCA5A5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WindowMinButton" TargetType="Button" BasedOn="{StaticResource WindowCloseButton}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1A2A44" />
+                    <Setter Property="Foreground" Value="#E6EDF7" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LogItem" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="2,3" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="14" BorderThickness="1" BorderBrush="#1E2A44">
+        <Grid Background="{StaticResource BackgroundGradient}">
+
+            <!-- Ambient glows behind everything -->
+            <Ellipse Fill="{StaticResource AmbientGlow}" Opacity="0.7" HorizontalAlignment="Center" VerticalAlignment="Stretch" Width="900" Margin="0,-200,0,0" />
+            <Ellipse Fill="#0E2A3C" Opacity="0.32" Width="560" Height="560" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Ellipse.Effect><BlurEffect Radius="180" /></Ellipse.Effect>
+            </Ellipse>
+
+            <!-- Content -->
+            <Grid Margin="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Custom title bar -->
+                <Grid Grid.Row="0" Background="#00000000" MouseDown="TitleBar_MouseDown">
+                    <TextBlock Text="WARP CONNECT" Style="{StaticResource EyebrowText}" FontSize="10" Margin="14,9,0,0" Foreground="#5E6B85" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Style="{StaticResource WindowMinButton}" Content="&#xE921;" ToolTip="Minimize" Click="MinimizeButton_Click" />
+                        <Button Style="{StaticResource WindowCloseButton}" Content="&#xE8BB;" ToolTip="Close" Click="CloseButton_Click" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Eyebrow + headline + sub -->
+                <StackPanel Grid.Row="1" Orientation="Vertical" HorizontalAlignment="Center" Margin="0,10,0,0">
+                    <TextBlock x:Name="TxtEyebrow" Text="W A R P     C O N N E C T" Style="{StaticResource EyebrowText}" FontSize="14" Foreground="#AAB8D4" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="TxtHeadline" Text="Ready" FontFamily="Segoe UI" FontWeight="Bold" FontSize="52" Foreground="#F2F7FF" HorizontalAlignment="Center" Margin="0,2,0,0">
+                        <TextBlock.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="0" Color="#38BDF8" Opacity="0.35" /></TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock x:Name="TxtSub" Text="Tap the button to connect through WARP." Foreground="#A9B8CF" FontSize="13" FontFamily="Segoe UI" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                </StackPanel>
+
+                <!-- Disc -->
+                <Grid Grid.Row="2" Width="230" Height="230" Margin="0,6,0,0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Ellipse x:Name="DiscGlow" Width="226" Height="226" Opacity="0.85">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#38BDF8" Offset="0.42" />
+                                <GradientStop Color="#38BDF8" Offset="0.42" />
+                                <GradientStop Color="#0E5A87" Offset="0.62" />
+                                <GradientStop Color="#030E1A" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                        <Ellipse.Effect>
+                            <BlurEffect Radius="64" />
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <Ellipse x:Name="DiscRing" Width="180" Height="180" Stroke="#38BDF8" StrokeThickness="1.4" Opacity="0.5" />
+
+                    <Ellipse x:Name="DiscFill" Width="176" Height="176" Cursor="Hand" MouseLeftButtonUp="Disc_MouseUp" MouseLeftButtonDown="Disc_MouseDown">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush GradientOrigin="0.38,0.34" Center="0.38,0.34" RadiusX="0.78" RadiusY="0.78">
+                                <GradientStop Color="#8FE1FF" Offset="0" />
+                                <GradientStop Color="#4CCFFF" Offset="0.25" />
+                                <GradientStop Color="#0EA5E9" Offset="0.72" />
+                                <GradientStop Color="#075985" Offset="1" />
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                        <Ellipse.Effect>
+                            <DropShadowEffect BlurRadius="22" ShadowDepth="0" Color="#081826" Opacity="0.9" />
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <Ellipse x:Name="DiscInner" Width="176" Height="34" VerticalAlignment="Top" Margin="0,16,0,0" Fill="#FFFFFF" Opacity="0.35" />
+
+                    <StackPanel x:Name="DiscTextPanel" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                        <TextBlock x:Name="TxtDiscCaption" Text="CONNECT" FontFamily="Segoe UI" FontWeight="Bold" FontSize="22" Foreground="#04121F" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="TxtDiscSub" Text="" FontFamily="Segoe UI" FontWeight="SemiBold" FontSize="10" Foreground="#0B2A3A" HorizontalAlignment="Center" Opacity="0.85" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ENDPOINT block -->
+                <StackPanel Grid.Row="3" HorizontalAlignment="Center" Margin="0,4,0,0">
+                    <TextBlock Text="E N D P O I N T" Style="{StaticResource EyebrowText}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="TxtEndpoint" Text="—" Style="{StaticResource MonoData}" FontSize="17" HorizontalAlignment="Center" Margin="0,1,0,0">
+                        <TextBlock.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#030A14" Opacity="0.8" /></TextBlock.Effect>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- NETWORK block -->
+                <StackPanel Grid.Row="4" HorizontalAlignment="Center" Margin="0,8,0,0">
+                    <TextBlock Text="N E T W O R K" Style="{StaticResource EyebrowText}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="TxtNetwork" Text="—" Style="{StaticResource MonoData}" FontSize="12.5" HorizontalAlignment="Center" TextAlignment="Center" Margin="8,1,8,0" />
+                </StackPanel>
+
+                <!-- Speed test row -->
+                <Grid Grid.Row="5" Margin="0,2,0,0" Width="320" HorizontalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="BtnSpeedTest" Grid.Column="0" Style="{StaticResource TealLink}" Content="SPEED TEST" Click="SpeedTest_Click" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,4,0,4" />
+                    <TextBlock x:Name="TxtSpeed" Grid.Column="1" Text="tap SPEED TEST to measure" Style="{StaticResource EyebrowText}" FontSize="11" Foreground="#6F7C96" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,2,0" />
+                </Grid>
+
+                <!-- Activity log card -->
+                <Border Grid.Row="6" Background="#0F1930" Opacity="0.92" BorderBrush="#1A2A44" BorderThickness="1" CornerRadius="14" Margin="24,10,24,0" Height="118">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="A C T I V I T Y" Style="{StaticResource EyebrowText}" Margin="14,10,0,0" />
+                        <ListBox x:Name="LogList" Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="10,2,10,8" FontFamily="Cascadia Mono, Consolas" FontSize="10.5" Foreground="#A9B8CF" SelectionMode="Single" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemContainerStyle="{StaticResource LogItem}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Text}" Foreground="{Binding KindBrush}" FontSize="10.5" TextTrimming="CharacterEllipsis" MaxHeight="16" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.Resources>
+                                <Style TargetType="ScrollBar">
+                                    <Setter Property="Width" Value="5" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                </Style>
+                            </ListBox.Resources>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- Footer -->
+                <Grid Grid.Row="7" Margin="0,6,0,8">
+                    <TextBlock Text="Developed by Sithu" Foreground="#5E6B85" FontSize="11" FontFamily="Segoe UI" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Button x:Name="BtnStatsToggle" Style="{StaticResource StatsToggle}" Content="SHARE STATS  ·  ON" Click="StatsToggle_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,30,0" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

@@ -9,6 +9,8 @@ namespace WarpConnect {
         public string AccountPath { get; set; }
         public string LastEndpoint { get; set; }
         public string ThemeGlowScale { get; set; }  // reserved for future theming; never shown
+        public string DeviceId { get; set; }        // install UUID, mirrors Android store.deviceId()
+        public bool ShareStats { get; set; }        // default ON — matches the Android app's always-on telemetry
 
         private static string Dir { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WarpConnect"); } }
         private static string FilePath { get { return Path.Combine(Dir, "settings.json"); } }
@@ -18,6 +20,7 @@ namespace WarpConnect {
             s.AccountPath = Path.Combine(Dir, "warpscout-account.json");
             s.LastEndpoint = "";
             s.ThemeGlowScale = "1";
+            s.ShareStats = true;
             try {
                 if (File.Exists(FilePath)) {
                     var raw = File.ReadAllText(FilePath);
@@ -25,10 +28,21 @@ namespace WarpConnect {
                     var d = ser.Deserialize<System.Collections.Generic.Dictionary<string, object>>(raw);
                     if (d.ContainsKey("accountPath") && d["accountPath"] != null) s.AccountPath = Convert.ToString(d["accountPath"]);
                     if (d.ContainsKey("lastEndpoint") && d["lastEndpoint"] != null) s.LastEndpoint = Convert.ToString(d["lastEndpoint"]);
+                    if (d.ContainsKey("deviceId") && d["deviceId"] != null) s.DeviceId = Convert.ToString(d["deviceId"]);
+                    if (d.ContainsKey("shareStats") && d["shareStats"] != null) s.ShareStats = Convert.ToBoolean(d["shareStats"]);
                 }
             } catch (Exception e) {
                 // Corrupt settings must never block the app.
                 System.Diagnostics.Debug.WriteLine("settings load failed: " + e.Message);
+            }
+            // A device id is mandatory for stats; sync-create on first run so
+            // a crash can never silently rotate the install id.
+            if (string.IsNullOrEmpty(s.DeviceId)) {
+                s.DeviceId = Guid.NewGuid().ToString();
+                try {
+                    Directory.CreateDirectory(Dir);
+                    s.Save();
+                } catch { /* reported at first stats submission */ }
             }
             Directory.CreateDirectory(Dir);
             return s;
@@ -41,6 +55,8 @@ namespace WarpConnect {
                 var d = new System.Collections.Generic.Dictionary<string, string>();
                 d["accountPath"] = AccountPath;
                 d["lastEndpoint"] = LastEndpoint ?? "";
+                d["deviceId"] = DeviceId ?? "";
+                d["shareStats"] = ShareStats.ToString();
                 File.WriteAllText(FilePath, ser.Serialize(d));
             } catch (Exception e) {
                 System.Diagnostics.Debug.WriteLine("settings save failed: " + e.Message);

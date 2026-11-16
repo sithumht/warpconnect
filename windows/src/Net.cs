@@ -7,7 +7,9 @@ using System.Text;
 
 namespace WarpConnect {
     public class TunnelInfo {
-        public string Ip = "", Asn = "", Org = "", Country = "", City = "";
+        public string Ip = "", AsnRaw = "", Org = "", Country = "", City = "";
+        public string Asn = "";
+        public string AsnOrg = "";
         public string Latency = "— ms", Speed = "— Mbps";
         public bool Ok;
     }
@@ -53,11 +55,17 @@ namespace WarpConnect {
             if (dict != null) {
                 string v;
                 if (dict.TryGetValue("query", out v)) info.Ip = v;
-                if (dict.TryGetValue("as", out v)) info.Asn = v;
+                if (dict.TryGetValue("as", out v)) info.AsnRaw = v;
                 if (dict.TryGetValue("org", out v)) info.Org = v;
                 if (dict.TryGetValue("countryCode", out v)) info.Country = v;
                 if (dict.TryGetValue("city", out v)) info.City = v;
                 info.Ok = !string.IsNullOrEmpty(info.Ip);
+                // Split "AS133385 Atom Myanmar Limited" into ASN + org.
+                if (!string.IsNullOrEmpty(info.AsnRaw)) {
+                    var sp = info.AsnRaw.IndexOf(' ');
+                    if (sp > 0) { info.Asn = info.AsnRaw.Substring(0, sp); info.AsnOrg = info.AsnRaw.Substring(sp + 1); }
+                    else { info.Asn = info.AsnRaw; info.AsnOrg = info.Org; }
+                } else { info.Asn = ""; info.AsnOrg = info.Org; }
             }
             return info;
         }

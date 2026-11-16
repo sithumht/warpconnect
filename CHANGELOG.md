@@ -3,6 +3,11 @@
 All notable changes to WARP Connect are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] - 2026-11-17
+
+### Added
+- Native WPF port under `windows\wpf\`: same Android look (navy gradient, glowing CONNECT disc, eyebrow caps, mono readouts, activity log), built on the same engine. First-run WinTUN download, runtime telemetry (Wi-Fi SSID + ASN/org/city/country, `/report`-compatible, heartbeat every 60 s), `/bye` on clean disconnect. Build: `.\windows\wpf\build.ps1`.
+
 ## [Unreleased] - 2026-11-16
 
 ### Added

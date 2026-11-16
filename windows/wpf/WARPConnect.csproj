@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <RootNamespace>WarpConnect</RootNamespace>
+    <AssemblyName>WARP Connect</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Optimize>true</Optimize>
+    <Version>1.0.1.0</Version>
+    <FileVersion>1.0.1.0</FileVersion>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="warpscout.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="app.manifest" />
+  </ItemGroup>
+
+</Project>

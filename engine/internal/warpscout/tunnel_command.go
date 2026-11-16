@@ -1,6 +1,7 @@
 ﻿package warpscout
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,17 @@ func runTunnelCmd(ctx context.Context, opts options) error {
 	// through bring-up would otherwise strand routes pointing at a dead adapter.
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
+
+	quit := make(chan struct{})
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			if strings.TrimSpace(scanner.Text()) == "quit" {
+				break
+			}
+		}
+		close(quit)
+	}()
 
 	a, err := loadAccount(opts.accountPath)
 	if err != nil {
@@ -80,6 +92,9 @@ func runTunnelCmd(ctx context.Context, opts options) error {
 		case <-ctx.Done():
 			fmt.Fprintln(os.Stderr, errPal.dim("Interrupted â€” tearing downâ€¦"))
 			return nil
+		case <-quit:
+			fmt.Fprintln(os.Stderr, "input closed")
+			return nil
 		default:
 		}
 		st, err := readTunnelStats()
@@ -103,6 +118,9 @@ func runTunnelCmd(ctx context.Context, opts options) error {
 		select {
 		case <-ctx.Done():
 			fmt.Fprintln(os.Stderr, errPal.dim("Disconnectingâ€¦"))
+			return nil
+		case <-quit:
+			fmt.Fprintln(os.Stderr, "input closed")
 			return nil
 		case <-ticker.C:
 			if st, err := readTunnelStats(); err == nil && st.Up {

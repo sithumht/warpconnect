@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
@@ -14,7 +15,7 @@ namespace WarpConnect {
         private Engine _engine;
         private DiscButton _disc;
         private Label _eyebrow, _headline, _sub, _lblEndpointCap, _lblEndpoint, _lblNetworkCap, _lblNetwork, _lblSpeedCap, _lblFooter;
-        private Button _speedBtn;
+        private Button _speedBtn, _statsToggle;
         private ListBox _logList;
         private Panel _activityCard;
         private Label _activityHeader;
@@ -26,19 +27,29 @@ namespace WarpConnect {
         private DateTime _connectedAt = DateTime.MinValue;
         private readonly System.Windows.Forms.Timer _healthTimer;
 
+        private OutboundReport _connectIdentity;
+        private int _heartbeatTicks;
+
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
         public MainForm() {
+            try {
+                // The inbox compiler references .NET Framework 4.0, whose default
+                // TLS is too old for Cloudflare / wintun.net — pin TLS 1.2+.
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)0x0C00; // TLS 1.2
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)0x3000; // TLS 1.3
+            } catch { }
             Text = "WARP Connect";
-            ClientSize = new Size(440, 824);
+            ClientSize = new Size(440, 680);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             DoubleBuffered = true;
+            AutoScaleMode = AutoScaleMode.None;
 
             _settings = Settings.Load();
             _endpoint = _settings.LastEndpoint;
@@ -54,6 +65,17 @@ namespace WarpConnect {
                 if (_state == UiState.Connected && _engine.TunnelExited) {
                     AppendLog("Tunnel dropped — the endpoint was torn down by the network.");
                     ApplyState(UiState.Failed, "Tunnel dropped.", "Tap the disc to reconnect.");
+                    ByeStats();
+                    return;
+                }
+                if (_state == UiState.Connected && _settings.ShareStats && _connectIdentity != null && !string.IsNullOrEmpty(_settings.DeviceId)) {
+                    _heartbeatTicks++;
+                    if (_heartbeatTicks % 40 == 0) {   // ≈60 s heartbeat, like the 15 s × 4 cadence in the app
+                        var id = _connectIdentity;
+                        var ep2 = _endpoint;
+                        var dev = _settings.DeviceId;
+                        ThreadPool.QueueUserWorkItem(delegate { try { Report.Heartbeat(id, ep2, dev); } catch { } });
+                    }
                 }
             };
             _healthTimer.Start();
@@ -68,18 +90,19 @@ namespace WarpConnect {
         }
 
         protected override void OnPaintBackground(PaintEventArgs pevent) {
-            using (var g = pevent.Graphics) {
+            var g = pevent.Graphics;
+            {
                 var rect = ClientRectangle;
-                using (var bg = new LinearGradientBrush(rect, ColorTranslator.FromHtml("#080D1A"), ColorTranslator.FromHtml("#101B31"), LinearGradientMode.Vertical)) {
+                using (var bg = new LinearGradientBrush(rect, ColorTranslator.FromHtml("#05070F"), ColorTranslator.FromHtml("#13203A"), LinearGradientMode.Vertical)) {
                     bg.InterpolationColors = new ColorBlend {
-                        Positions = new float[] { 0f, 0.45f, 1f },
-                        Colors = new[] { ColorTranslator.FromHtml("#080D1A"), ColorTranslator.FromHtml("#0C1424"), ColorTranslator.FromHtml("#101B31") }
+                        Positions = new float[] { 0f, 0.45f, 0.78f, 1f },
+                        Colors = new[] { ColorTranslator.FromHtml("#05070F"), ColorTranslator.FromHtml("#0B1220"), ColorTranslator.FromHtml("#0E1830"), ColorTranslator.FromHtml("#13203A") }
                     };
                     g.FillRectangle(bg, rect);
                 }
                 // Ambient glow behind the disc — EMERALD haze, like the app
                 using (var glow = new GraphicsPath()) {
-                    glow.AddEllipse(Width / 2 - 260, 120, 520, 420);
+                    glow.AddEllipse(Width / 2 - 260, 130, 520, 420);
                     using (var glowBrush = new PathGradientBrush(glow)) {
                         glowBrush.CenterPoint = new PointF(Width / 2, 300);
                         glowBrush.CenterColor = Color.FromArgb(38, 52, 211, 153);
@@ -92,61 +115,62 @@ namespace WarpConnect {
 
         private void BuildUi() {
             // Top eyebrow — letterspaced like the app
-            _eyebrow = MakeLabel("W  A  R  P     C  O  N  N  E  C  T", 11f, "Segoe UI Semibold", ColorTranslator.FromHtml("#C6CFDD"), FontStyle.Bold);
-            _eyebrow.Bounds = new Rectangle(0, 30, Width, 22);
+            _eyebrow = MakeLabel("W  A  R  P     C  O  N  N  E  C  T", 10.5f, "Segoe UI Semibold", ColorTranslator.FromHtml("#A9B8CF"), FontStyle.Bold);
+            _eyebrow.Bounds = new Rectangle(0, 22, Width, 20);
             _eyebrow.TextAlign = ContentAlignment.MiddleCenter;
 
-            _headline = MakeLabel("Ready", 44f, "Segoe UI Semibold", Color.White, FontStyle.Bold);
-            _headline.Bounds = new Rectangle(0, 56, Width, 88);
+            _headline = MakeLabel("Ready", 40f, "Segoe UI Semibold", Color.White, FontStyle.Bold);
+            _headline.Bounds = new Rectangle(0, 40, Width, 74);
             _headline.TextAlign = ContentAlignment.MiddleCenter;
 
-            _sub = MakeLabel("Tap the button to connect through WARP.", 12.5f, "Segoe UI", ColorTranslator.FromHtml("#B9C4D6"), FontStyle.Regular);
-            _sub.Bounds = new Rectangle(10, 136, Width - 20, 60);
+            _sub = MakeLabel("Tap the button to connect through WARP.", 11.5f, "Segoe UI", ColorTranslator.FromHtml("#B9C4D6"), FontStyle.Regular);
+            _sub.Bounds = new Rectangle(10, 110, Width - 20, 58);
             _sub.TextAlign = ContentAlignment.TopCenter;
 
             // The disc
-            _disc = new DiscButton { Size = new Size(240, 240), Location = new Point((Width - 240) / 2, 202) };
+            _disc = new DiscButton { Size = new Size(200, 200), Location = new Point((Width - 200) / 2, 166) };
             _disc.Clicked += DiscClicked;
+            _disc.Invalidate();
 
             // Eyebrows + mono readouts, app palette
-            _lblEndpointCap = MakeLabel("E N D P O I N T", 10f, "Segoe UI Semibold", ColorTranslator.FromHtml("#93A1BB"), FontStyle.Bold);
-            _lblEndpointCap.Bounds = new Rectangle(0, 462, Width, 18);
+            _lblEndpointCap = MakeLabel("E N D P O I N T", 9.5f, "Segoe UI Semibold", ColorTranslator.FromHtml("#A9B8CF"), FontStyle.Bold);
+            _lblEndpointCap.Bounds = new Rectangle(0, 372, Width, 16);
             _lblEndpointCap.TextAlign = ContentAlignment.MiddleCenter;
 
             _lblEndpoint = MakeLabel("—", 13f, "Cascadia Mono", ColorTranslator.FromHtml("#E8ECF4"), FontStyle.Regular);
-            _lblEndpoint.Bounds = new Rectangle(0, 480, Width, 26);
+            _lblEndpoint.Bounds = new Rectangle(0, 376, Width, 24);
             _lblEndpoint.TextAlign = ContentAlignment.MiddleCenter;
 
-            _lblNetworkCap = MakeLabel("N E T W O R K", 10f, "Segoe UI Semibold", ColorTranslator.FromHtml("#93A1BB"), FontStyle.Bold);
-            _lblNetworkCap.Bounds = new Rectangle(0, 512, Width, 18);
+            _lblNetworkCap = MakeLabel("N E T W O R K", 9.5f, "Segoe UI Semibold", ColorTranslator.FromHtml("#A9B8CF"), FontStyle.Bold);
+            _lblNetworkCap.Bounds = new Rectangle(0, 406, Width, 16);
             _lblNetworkCap.TextAlign = ContentAlignment.MiddleCenter;
 
             _lblNetwork = MakeLabel("—", 10.5f, "Cascadia Mono", ColorTranslator.FromHtml("#E8ECF4"), FontStyle.Regular);
-            _lblNetwork.Bounds = new Rectangle(0, 530, Width, 46);
+            _lblNetwork.Bounds = new Rectangle(0, 424, Width, 44);
             _lblNetwork.TextAlign = ContentAlignment.MiddleCenter;
 
             // Speed test row
-            _speedBtn = new Button { Text = "SPEED TEST", FlatStyle = FlatStyle.Flat, ForeColor = ColorTranslator.FromHtml("#2DD4BF"), Font = new Font("Segoe UI Semibold", 10f, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, BackColor = Color.Transparent, Bounds = new Rectangle(60, 578, 120, 26) };
+            _speedBtn = new Button { Text = "SPEED TEST", FlatStyle = FlatStyle.Flat, ForeColor = ColorTranslator.FromHtml("#2DD4BF"), Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, BackColor = Color.Transparent, Bounds = new Rectangle(48, 472, 110, 24) };
             _speedBtn.FlatAppearance.BorderSize = 0;
             _speedBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(30, 45, 212, 191);
             _speedBtn.Click += delegate { RunSpeedTest(); };
 
             _lblSpeedCap = MakeLabel("tap SPEED TEST to measure", 10f, "Segoe UI", ColorTranslator.FromHtml("#7A88A3"), FontStyle.Regular);
-            _lblSpeedCap.Bounds = new Rectangle(190, 578, 190, 26);
+            _lblSpeedCap.Bounds = new Rectangle(176, 472, 216, 24);
             _lblSpeedCap.TextAlign = ContentAlignment.MiddleLeft;
 
             // Activity log card
-            _activityCard = new Panel { Bounds = new Rectangle(14, 612, Width - 28, 150) };
+            _activityCard = new Panel { Bounds = new Rectangle(14, 504, Width - 28, 132) };
             _activityCard.Paint += DrawActivityCard;
             _activityCard.BackColor = Color.Transparent;
 
-            _activityHeader = MakeLabel("A C T I V I T Y", 10f, "Segoe UI Semibold", ColorTranslator.FromHtml("#93A1BB"), FontStyle.Bold);
-            _activityHeader.Bounds = new Rectangle(28, 626, 120, 18);
+            _activityHeader = MakeLabel("A C T I V I T Y", 9.5f, "Segoe UI Semibold", ColorTranslator.FromHtml("#A9B8CF"), FontStyle.Bold);
+            _activityHeader.Bounds = new Rectangle(28, 516, 120, 16);
 
             _logList = new ListBox {
-                Bounds = new Rectangle(28, 648, Width - 56, 104),
-                BackColor = ColorTranslator.FromHtml("#0F1930"),
-                ForeColor = ColorTranslator.FromHtml("#B9C4D6"),
+                Bounds = new Rectangle(28, 534, Width - 56, 96),
+                BackColor = ColorTranslator.FromHtml("#0B1220"),
+                ForeColor = ColorTranslator.FromHtml("#A9B8CF"),
                 Font = new Font("Cascadia Mono", 8.5f),
                 BorderStyle = BorderStyle.None,
                 SelectionMode = SelectionMode.None,
@@ -155,15 +179,38 @@ namespace WarpConnect {
             };
             _logList.DrawItem += LogDrawItem;
 
-            _lblFooter = MakeLabel("Developed by Sithu", 9.5f, "Segoe UI", ColorTranslator.FromHtml("#5E6B85"), FontStyle.Regular);
-            _lblFooter.Bounds = new Rectangle(0, 772, Width, 22);
+            _lblFooter = MakeLabel("Developed by Sithu", 9f, "Segoe UI", ColorTranslator.FromHtml("#5B6B85"), FontStyle.Regular);
+            _lblFooter.Bounds = new Rectangle(0, 640, Width, 26);
             _lblFooter.TextAlign = ContentAlignment.MiddleCenter;
+
+            _statsToggle = new Button {
+                Text = _settings.ShareStats ? "SHARE STATS  ·  ON" : "SHARE STATS  ·  OFF",
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 7.5f, FontStyle.Bold),
+                ForeColor = _settings.ShareStats ? ColorTranslator.FromHtml("#2DD4BF") : ColorTranslator.FromHtml("#7A88A3"),
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand,
+                UseVisualStyleBackColor = false,
+                Bounds = new Rectangle(Width - 112 - 14, 624, 112, 18),
+                TabStop = false
+            };
+            _statsToggle.FlatAppearance.BorderColor = _settings.ShareStats ? ColorTranslator.FromHtml("#22D3EE") : ColorTranslator.FromHtml("#2E3A55");
+            _statsToggle.FlatAppearance.BorderSize = 1;
+            _statsToggle.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, 45, 212, 191);
+            _statsToggle.Click += delegate {
+                _settings.ShareStats = !_settings.ShareStats;
+                try { _settings.Save(); } catch { }
+                _statsToggle.Text = _settings.ShareStats ? "SHARE STATS  ·  ON" : "SHARE STATS  ·  OFF";
+                _statsToggle.ForeColor = _settings.ShareStats ? ColorTranslator.FromHtml("#2DD4BF") : ColorTranslator.FromHtml("#7A88A3");
+                _statsToggle.FlatAppearance.BorderColor = _settings.ShareStats ? ColorTranslator.FromHtml("#22D3EE") : ColorTranslator.FromHtml("#2E3A55");
+                AppendLogSafe(_settings.ShareStats ? "Stats reporting ON — send endpoint + network with each verified connect." : "Stats reporting OFF.");
+            };
 
             Controls.AddRange(new Control[] {
                 _eyebrow, _headline, _sub, _disc,
                 _lblEndpointCap, _lblEndpoint, _lblNetworkCap, _lblNetwork,
                 _speedBtn, _lblSpeedCap,
-                _activityCard, _activityHeader, _logList, _lblFooter
+                _activityCard, _activityHeader, _logList, _lblFooter, _statsToggle
             });
         }
 
@@ -190,9 +237,9 @@ namespace WarpConnect {
             var g = e.Graphics;
             var rect = _activityCard.ClientRectangle;
             rect.Inflate(-1, -1);
-            using (var path = RoundRect(rect, 18)) {
-                using (var fill = new SolidBrush(Color.FromArgb(200, 18, 28, 48))) g.FillPath(fill, path);
-                using (var pen = new Pen(Color.FromArgb(28, 148, 184, 255), 1f)) g.DrawPath(pen, path);
+            using (var path = RoundRect(rect, 16)) {
+                using (var fill = new SolidBrush(Color.FromArgb(220, 11, 18, 32))) g.FillPath(fill, path);
+                using (var pen = new Pen(Color.FromArgb(120, 19, 32, 58), 1f)) g.DrawPath(pen, path);
             }
         }
 
@@ -211,7 +258,7 @@ namespace WarpConnect {
             if (e.Index < 0) return;
             e.DrawBackground();
             var text = Convert.ToString(_logList.Items[e.Index]);
-            var color = ColorTranslator.FromHtml("#B9C4D6");
+            var color = ColorTranslator.FromHtml("#A9B8CF");
             if (text != null && text.Contains("Verified")) color = ColorTranslator.FromHtml("#34D399");
             else if (text != null && (text.Contains("Failed") || text.Contains("failed") || text.Contains("no handshake"))) color = ColorTranslator.FromHtml("#FBBF24");
             using (var br = new SolidBrush(color)) {
@@ -286,9 +333,16 @@ namespace WarpConnect {
             }
         }
 
+        private void ByeStats() {
+            if (!_settings.ShareStats || string.IsNullOrEmpty(_settings.DeviceId)) return;
+            var dev = _settings.DeviceId;
+            ThreadPool.QueueUserWorkItem(delegate { try { Report.Bye(dev); } catch { } });
+        }
+
         private void DiscClicked(object sender, EventArgs e) {
             if (_state == UiState.Connected) {
                 AppendLog("Disconnecting…");
+                ByeStats();
                 _engine.StopTunnel();
                 AppendLog("Disconnected.");
                 _endpoint = _settings.LastEndpoint = "";
@@ -353,7 +407,7 @@ namespace WarpConnect {
                 // 3) WinTUN
                 var wtError = Wintun.Ensure(AppDomain.CurrentDomain.BaseDirectory, AppendLogSafe);
                 if (wtError != null) {
-                    AppendLog(wtError);
+                    AppendLogSafe(wtError);
                     Ui(delegate { ApplyState(UiState.Failed, "WinTUN missing", "Install WinTUN failed — see the log for details."); });
                     return;
                 }
@@ -403,22 +457,83 @@ namespace WarpConnect {
             ThreadPool.QueueUserWorkItem(delegate {
                 var info = Net.FetchTunnelInfo();
                 var latency = Net.PingMs("1.1.1.1", 2500);
+                var identity = BuildIdentity(info);
                 Ui(delegate {
                     if (!info.Ok) {
                         _lblNetwork.Text = "connected — could not read exit info";
-                        return;
+                    } else {
+                        var parts = new List<string>();
+                        parts.Add(info.Ip);
+                        if (!string.IsNullOrEmpty(info.Asn)) parts.Add(info.Asn);
+                        if (!string.IsNullOrEmpty(info.AsnOrg)) parts.Add(info.AsnOrg);
+                        var geo = info.Country;
+                        if (!string.IsNullOrEmpty(info.City)) geo = info.City + " · " + geo;
+                        if (!string.IsNullOrEmpty(geo)) parts.Add(geo);
+                        _lblNetwork.Text = string.Join("  |  ", parts.ToArray());
                     }
-                    var parts = new List<string>();
-                    parts.Add(info.Ip);
-                    if (!string.IsNullOrEmpty(info.Asn)) parts.Add(info.Asn);
-                    if (!string.IsNullOrEmpty(info.Org) && info.Org != info.Asn) parts.Add(info.Org);
-                    var geo = info.Country;
-                    if (!string.IsNullOrEmpty(info.City)) geo = info.City + " · " + geo;
-                    if (!string.IsNullOrEmpty(geo)) parts.Add(geo);
-                    _lblNetwork.Text = string.Join("  |  ", parts.ToArray());
                     _lblSpeedCap.Text = latency >= 0 ? (latency + " ms") : "ping unavailable";
                 });
+                TryReport(identity);
             });
+        }
+
+        // Voluntary telemetry — send only what the Android app sends, and only if the toggle is on.
+        private void TryReport(OutboundReport id) {
+            if (!_settings.ShareStats) { _heartbeatTicks = 0; return; }
+            _connectIdentity = id;
+            _heartbeatTicks = 0;
+            var ep = _endpoint;
+            var dev = _settings.DeviceId;
+            if (string.IsNullOrEmpty(ep) || string.IsNullOrEmpty(dev)) return;
+            ThreadPool.QueueUserWorkItem(delegate {
+                bool okReport = false, okBeat = false;
+                try { okReport = Report.SubmitReport(id, ep); } catch { }
+                try { okBeat = Report.Heartbeat(id, ep, dev); } catch { }
+                Ui(delegate {
+                    if (okReport || okBeat) AppendLog("Stats reported (endpoint: " + ep + ").");
+                });
+            });
+        }
+
+        // Build the outbound identity: transport + SSID (Wi-Fi) or ethernet, ISP from the exit-geo lookup.
+        private OutboundReport BuildIdentity(TunnelInfo info) {
+            var id = new OutboundReport();
+            var ssid = WifiSsid();
+            if (!string.IsNullOrEmpty(ssid)) { id.Transport = "wifi"; id.Ssid = ssid; } else { id.Transport = "eth"; }
+            if (info != null && info.Ok) {
+                id.Isp = info.AsnOrg ?? info.Org ?? "";
+                id.Asn = info.Asn ?? "";
+                id.AsnOrg = info.AsnOrg ?? "";
+                id.Country = (info.Country ?? "").ToUpperInvariant();
+                id.City = info.City ?? "";
+            }
+            return id;
+        }
+
+        private string WifiSsid() {
+            try {
+                var psi = new ProcessStartInfo {
+                    FileName = "netsh",
+                    Arguments = "wlan show interfaces",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using (var p = Process.Start(psi)) {
+                    var stdout = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(5000);
+                    if (p.ExitCode != 0) return null;
+                    foreach (var rawLine in stdout.Split('\n')) {
+                        var line = rawLine.Trim();
+                        var m = System.Text.RegularExpressions.Regex.Match(line, @"^SSID\s*:\s*(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (m.Success && !line.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase)) {
+                            var v = m.Groups[1].Value.Trim();
+                            if (v.Length > 0) return v;
+                        }
+                    }
+                }
+            } catch { }
+            return null;
         }
 
         private void RunSpeedTest() {
@@ -440,7 +555,9 @@ namespace WarpConnect {
 
         protected override void OnFormClosing(FormClosingEventArgs e) {
             base.OnFormClosing(e);
+            ByeStats();
             try { _engine.StopTunnel(); } catch { }
         }
     }
 }
+
