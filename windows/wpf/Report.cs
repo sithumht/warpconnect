@@ -16,6 +16,12 @@ namespace WarpConnect {
         public string City = "";
     }
 
+    public class PostResult {
+        public bool Ok;
+        public int Status = 0;
+        public string Detail = "";
+    }
+
     public static class Report {
         private const string URL_STD = "https://warpconnect-stats.sithu-mhtvps.workers.dev/report";
         private const string URL_HEARTBEAT = "https://warpconnect-stats.sithu-mhtvps.workers.dev/heartbeat";
@@ -23,16 +29,14 @@ namespace WarpConnect {
 
         private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
-        public static async Task<bool> SubmitReport(OutboundReport id, string endpoint) =>
+        public static async Task<PostResult> SubmitReport(OutboundReport id, string endpoint) =>
             await Post(URL_STD, Payload(id, endpoint, null));
 
-        public static async Task<bool> Heartbeat(OutboundReport id, string endpoint, string deviceId) =>
+        public static async Task<PostResult> Heartbeat(OutboundReport id, string endpoint, string deviceId) =>
             await Post(URL_HEARTBEAT, Payload(id, endpoint, deviceId));
 
-        public static async Task<bool> Bye(string deviceId) {
-            if (string.IsNullOrEmpty(deviceId)) return false;
-            return await Post(URL_BYE, "{\"device\":\"" + Escape(deviceId) + "\"}");
-        }
+        public static async Task<PostResult> Bye(string deviceId) =>
+            await Post(URL_BYE, "{\"device\":\"" + Escape(deviceId) + "\"}");
 
         private static string Payload(OutboundReport id, string endpoint, string? deviceId) {
             var sb = new StringBuilder();
@@ -55,15 +59,34 @@ namespace WarpConnect {
             ? ""
             : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
-        private static async Task<bool> Post(string url, string body) {
+        private static async Task<PostResult> Post(string url, string body) {
+            var result = new PostResult();
+            var kind = url.Substring(url.LastIndexOf('/') + 1);
             try {
                 var content = new StringContent(body, Encoding.UTF8, "application/json");
                 using (var resp = await _http.PostAsync(url, content)) {
-                    return (int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300;
+                    result.Status = (int)resp.StatusCode;
+                    try {
+                        var text = await resp.Content.ReadAsStringAsync();
+                        result.Detail = text.Length > 160 ? text.Substring(0, 160) : text;
+                    } catch { }
+                    result.Ok = result.Status >= 200 && result.Status < 300;
                 }
-            } catch {
-                return false;
+            } catch (Exception e) {
+                var chain = e.GetType().Name + ": " + e.Message;
+                var inner = e.InnerException;
+                while (inner != null) { chain += " <- " + inner.GetType().Name + ": " + inner.Message; inner = inner.InnerException; }
+                result.Detail = chain;
             }
+            // Diagnostics — the activity card only shows a line; keep a full trail here.
+            try {
+                var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "warpconnect-stats-trace.log");
+                System.IO.File.AppendAllText(path,
+                    DateTime.Now.ToString("HH:mm:ss.fff") + " " + kind +
+                    " status=" + result.Status + " ok=" + result.Ok +
+                    " detail=" + (result.Detail ?? "").Replace('\r', ' ').Replace('\n', ' ') + "\n");
+            } catch { }
+            return result;
         }
     }
 }

@@ -558,9 +558,19 @@ namespace WarpConnect {
             _heartbeatTicks = 0;
             var ep = endpoint;
             var dev = _settings.DeviceId;
-            try { await Report.SubmitReport(id, ep); } catch { }
-            try { await Report.Heartbeat(id, ep, dev); } catch { }
-            AppendLogSafe("Stats reported (endpoint: " + ep + ").");
+            // The engine reports "tunnel is up" at handshake completion, but DNS
+            // on the freshly-created adapter takes a beat to become routable —
+            // give it a moment so the first POST doesn't die on "No such host".
+            await System.Threading.Tasks.Task.Delay(2500);
+            var r = await Report.SubmitReport(id, ep);
+            if (!r.Ok) {
+                AppendLogSafe("Stats POST failed (status " + r.Status + ")" + (string.IsNullOrEmpty(r.Detail) ? "" : " — " + r.Detail) + " · retrying in 4s…");
+                await System.Threading.Tasks.Task.Delay(4000);
+                r = await Report.SubmitReport(id, ep);
+                AppendLogSafe("Stats POST retry → " + (r.Ok ? "OK (status " + r.Status + ")" : "FAILED (status " + r.Status + ")" + (string.IsNullOrEmpty(r.Detail) ? "" : " — " + r.Detail)));
+            }
+            var h = await Report.Heartbeat(id, ep, dev);
+            AppendLogSafe("Stats reported (endpoint: " + ep + ") — " + (r.Ok ? "post ok (" + r.Status + ")" : "post FAILED") + " · " + (h.Ok ? "heartbeat ok (" + h.Status + ")" : "heartbeat FAILED (" + h.Status + ")"));
             if (!string.IsNullOrEmpty(id.Asn)) {
                 AppendLogSafe("Sent network: " + id.Asn + " · " + id.AsnOrg + " · " + id.Country + ((id.City ?? "") == "" ? "" : " · " + id.City));
             }
