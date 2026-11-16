@@ -668,12 +668,21 @@ class WarpVpnService : VpnService() {
             notify("Connected", candidate.endpoint)
         }
         // Best-effort: report the verified working endpoint + the network
-        // profile it worked on (sampled before the tunnel came up). Failures
-        // are ignored — this must never affect the tunnel. Kept out of the
-        // visible activity log.
+        // profile it worked on (sampled before the tunnel came up). The engine
+        // fires "tunnel is up" at handshake completion, but DNS on the VPN
+        // interface takes a beat to route — wait briefly, and retry once if
+        // the first attempt dies on the race. Failures never affect the tunnel.
         val identity = connectIdentity
         scope.launch {
-            runCatching { Report.submit(identity, candidate.endpoint) }
+            runCatching { kotlinx.coroutines.delay(2_500) }
+            var ok = runCatching { Report.submit(identity, candidate.endpoint) }.getOrDefault(false)
+            if (!ok) {
+                runCatching { kotlinx.coroutines.delay(4_000) }
+                ok = runCatching { Report.submit(identity, candidate.endpoint) }.getOrDefault(false)
+                WarpHub.log(if (ok) "Stats reported (retry ok)" else "Stats report failed (endpoint: ${candidate.endpoint})")
+            } else {
+                WarpHub.log("Stats reported (endpoint: ${candidate.endpoint})")
+            }
             runCatching { Report.heartbeat(identity, candidate.endpoint, store.deviceId()) }
         }
     }
