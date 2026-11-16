@@ -193,7 +193,7 @@
                 <!-- NETWORK block -->
                 <StackPanel Grid.Row="4" HorizontalAlignment="Center" Margin="0,8,0,0">
                     <TextBlock Text="N E T W O R K" Style="{StaticResource EyebrowText}" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="TxtNetwork" Text="—" Style="{StaticResource MonoData}" FontSize="12.5" HorizontalAlignment="Center" TextAlignment="Center" Margin="8,1,8,0" />
+                    <TextBlock x:Name="TxtNetwork" Text="—" Style="{StaticResource MonoData}" FontSize="12" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="400" LineHeight="16" Margin="8,1,8,0" />
                 </StackPanel>
 
                 <!-- Speed test row -->
