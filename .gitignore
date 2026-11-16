@@ -43,3 +43,4 @@ windows/wpf/bin/
 windows/wpf/obj/
 windows/wpf/warpscout.exe
 
+website/node_modules/
