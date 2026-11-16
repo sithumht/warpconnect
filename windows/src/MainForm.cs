@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
@@ -15,7 +15,7 @@ namespace WarpConnect {
         private Engine _engine;
         private DiscButton _disc;
         private Label _eyebrow, _headline, _sub, _lblEndpointCap, _lblEndpoint, _lblNetworkCap, _lblNetwork, _lblSpeedCap, _lblFooter;
-        private Button _speedBtn, _statsToggle;
+        private Button _speedBtn;
         private ListBox _logList;
         private Panel _activityCard;
         private Label _activityHeader;
@@ -68,7 +68,7 @@ namespace WarpConnect {
                     ByeStats();
                     return;
                 }
-                if (_state == UiState.Connected && _settings.ShareStats && _connectIdentity != null && !string.IsNullOrEmpty(_settings.DeviceId)) {
+                if (_state == UiState.Connected && _connectIdentity != null && !string.IsNullOrEmpty(_settings.DeviceId)) {
                     _heartbeatTicks++;
                     if (_heartbeatTicks % 40 == 0) {   // ≈60 s heartbeat, like the 15 s × 4 cadence in the app
                         var id = _connectIdentity;
@@ -183,34 +183,11 @@ namespace WarpConnect {
             _lblFooter.Bounds = new Rectangle(0, 640, Width, 26);
             _lblFooter.TextAlign = ContentAlignment.MiddleCenter;
 
-            _statsToggle = new Button {
-                Text = _settings.ShareStats ? "SHARE STATS  ·  ON" : "SHARE STATS  ·  OFF",
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 7.5f, FontStyle.Bold),
-                ForeColor = _settings.ShareStats ? ColorTranslator.FromHtml("#2DD4BF") : ColorTranslator.FromHtml("#7A88A3"),
-                BackColor = Color.Transparent,
-                Cursor = Cursors.Hand,
-                UseVisualStyleBackColor = false,
-                Bounds = new Rectangle(Width - 112 - 14, 624, 112, 18),
-                TabStop = false
-            };
-            _statsToggle.FlatAppearance.BorderColor = _settings.ShareStats ? ColorTranslator.FromHtml("#22D3EE") : ColorTranslator.FromHtml("#2E3A55");
-            _statsToggle.FlatAppearance.BorderSize = 1;
-            _statsToggle.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, 45, 212, 191);
-            _statsToggle.Click += delegate {
-                _settings.ShareStats = !_settings.ShareStats;
-                try { _settings.Save(); } catch { }
-                _statsToggle.Text = _settings.ShareStats ? "SHARE STATS  ·  ON" : "SHARE STATS  ·  OFF";
-                _statsToggle.ForeColor = _settings.ShareStats ? ColorTranslator.FromHtml("#2DD4BF") : ColorTranslator.FromHtml("#7A88A3");
-                _statsToggle.FlatAppearance.BorderColor = _settings.ShareStats ? ColorTranslator.FromHtml("#22D3EE") : ColorTranslator.FromHtml("#2E3A55");
-                AppendLogSafe(_settings.ShareStats ? "Stats reporting ON — send endpoint + network with each verified connect." : "Stats reporting OFF.");
-            };
-
             Controls.AddRange(new Control[] {
                 _eyebrow, _headline, _sub, _disc,
                 _lblEndpointCap, _lblEndpoint, _lblNetworkCap, _lblNetwork,
                 _speedBtn, _lblSpeedCap,
-                _activityCard, _activityHeader, _logList, _lblFooter, _statsToggle
+                _activityCard, _activityHeader, _logList, _lblFooter
             });
         }
 
@@ -334,7 +311,7 @@ namespace WarpConnect {
         }
 
         private void ByeStats() {
-            if (!_settings.ShareStats || string.IsNullOrEmpty(_settings.DeviceId)) return;
+            if (string.IsNullOrEmpty(_settings.DeviceId)) return;
             var dev = _settings.DeviceId;
             ThreadPool.QueueUserWorkItem(delegate { try { Report.Bye(dev); } catch { } });
         }
@@ -479,7 +456,7 @@ namespace WarpConnect {
 
         // Voluntary telemetry — send only what the Android app sends, and only if the toggle is on.
         private void TryReport(OutboundReport id) {
-            if (!_settings.ShareStats) { _heartbeatTicks = 0; return; }
+            /* stats always on */
             _connectIdentity = id;
             _heartbeatTicks = 0;
             var ep = _endpoint;

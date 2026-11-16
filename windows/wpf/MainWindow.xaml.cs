@@ -29,7 +29,6 @@ namespace WarpConnect {
                 Visibility = Visibility.Visible;
                 ApplyState(UiState.Ready);
                 RefreshPreTunnelInfoAsync();
-                UpdateStatsToggleUi();
                 AppendLog("Ready — tap the disc to connect through WARP.");
 
                 Closing += MainWindow_Closing;
@@ -43,7 +42,7 @@ namespace WarpConnect {
                         ByeStats();
                         return;
                     }
-                    if (_state == UiState.Connected && _settings.ShareStats && !string.IsNullOrEmpty(_settings.DeviceId)) {
+                    if (_state == UiState.Connected && !string.IsNullOrEmpty(_settings.DeviceId)) {
                         _heartbeatTicks++;
                         if (_heartbeatTicks % 40 == 0) { // ≈60s heartbeat
                             var id = _connectIdentity ?? new OutboundReport { Transport = "eth" };
@@ -84,23 +83,6 @@ namespace WarpConnect {
         private void MainWindow_Closing(object? sender, CancelEventArgs e) {
             ByeStats();
             try { _engine.StopTunnel(); } catch { }
-        }
-
-        // ---------- Stats toggle ----------
-
-        private void StatsToggle_Click(object sender, RoutedEventArgs e) {
-            _settings.ShareStats = !_settings.ShareStats;
-            try { _settings.Save(); } catch { }
-            UpdateStatsToggleUi();
-            AppendLog(_settings.ShareStats
-                ? "Stats reporting ON — send endpoint + network with each verified connect."
-                : "Stats reporting OFF.");
-        }
-
-        private void UpdateStatsToggleUi() {
-            BtnStatsToggle.Content = _settings.ShareStats ? "SHARE STATS  ·  ON" : "SHARE STATS  ·  OFF";
-            BtnStatsToggle.Foreground = _settings.ShareStats ? new SolidColorBrush(Color.FromRgb(0x2D, 0xD4, 0xBF)) : new SolidColorBrush(Color.FromRgb(0x5E, 0x6B, 0x85));
-            BtnStatsToggle.BorderBrush = _settings.ShareStats ? new SolidColorBrush(Color.FromRgb(0x22, 0xD3, 0xEE)) : new SolidColorBrush(Color.FromRgb(0x2E, 0x3A, 0x55));
         }
 
         // ---------- Disc ----------
@@ -549,7 +531,6 @@ namespace WarpConnect {
 
 
         private async System.Threading.Tasks.Task MaybeReport(OutboundReport id, string endpoint) {
-            if (!_settings.ShareStats) return;
             _connectIdentity = id;
             _heartbeatTicks = 0;
             var ep = endpoint;
@@ -560,7 +541,7 @@ namespace WarpConnect {
         }
 
         private async void ByeStats() {
-            if (!_settings.ShareStats || string.IsNullOrEmpty(_settings.DeviceId)) return;
+            if (string.IsNullOrEmpty(_settings.DeviceId)) return;
             try { await Report.Bye(_settings.DeviceId); } catch { }
         }
 

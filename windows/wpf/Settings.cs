@@ -8,7 +8,6 @@ namespace WarpConnect {
         public string AccountPath { get; set; } = "";
         public string LastEndpoint { get; set; } = "";
         public string DeviceId { get; set; } = "";
-        public bool ShareStats { get; set; } = true;
 
         private static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WarpConnect");
         private static string FilePath => Path.Combine(Dir, "settings.json");
@@ -25,7 +24,6 @@ namespace WarpConnect {
                         if (!string.IsNullOrEmpty(s2.AccountPath)) s.AccountPath = s2.AccountPath;
                         if (!string.IsNullOrEmpty(s2.LastEndpoint)) s.LastEndpoint = s2.LastEndpoint;
                         if (!string.IsNullOrEmpty(s2.DeviceId)) s.DeviceId = s2.DeviceId;
-                        s.ShareStats = s2.ShareStats.HasValue ? s2.ShareStats.Value : true;
                     }
                 }
             } catch (Exception e) {
@@ -45,8 +43,7 @@ namespace WarpConnect {
                 File.WriteAllText(FilePath, JsonSerializer.Serialize(new SettingsDto {
                     AccountPath = AccountPath,
                     LastEndpoint = LastEndpoint ?? "",
-                    DeviceId = DeviceId ?? "",
-                    ShareStats = ShareStats
+                    DeviceId = DeviceId ?? ""
                 }));
             } catch (Exception e) {
                 System.Diagnostics.Debug.WriteLine("settings save failed: " + e.Message);
@@ -57,7 +54,6 @@ namespace WarpConnect {
             [JsonPropertyName("accountPath")] public string? AccountPath { get; set; }
             [JsonPropertyName("lastEndpoint")] public string? LastEndpoint { get; set; }
             [JsonPropertyName("deviceId")] public string? DeviceId { get; set; }
-            [JsonPropertyName("shareStats")] public bool? ShareStats { get; set; }
         }
     }
 }
