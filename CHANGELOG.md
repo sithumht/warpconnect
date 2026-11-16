@@ -3,15 +3,22 @@
 All notable changes to WARP Connect are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 2026-11-17
+## [1.0.2] - 2026-11-16
+
+Two delivery targets in one release: the Android APK and the Windows desktop build (new).
 
 ### Added
-- Native WPF port under `windows\wpf\`: same Android look (navy gradient, glowing CONNECT disc, eyebrow caps, mono readouts, activity log), built on the same engine. First-run WinTUN download, runtime telemetry (Wi-Fi SSID + ASN/org/city/country, `/report`-compatible, heartbeat every 60 s), `/bye` on clean disconnect. Build: `.\windows\wpf\build.ps1`.
+- Windows desktop build ships in this release: WPF port (warpscout engine + WinTUN), single-file self-contained `WARP Connect.exe` with the engine and driver bundled. Endpoint ladder: cached winner → ATOM-verified seeds → full scan. HTTPS-first exit-info chain (ipwho.is → ifconfig.co → ip-api.com). App icon; WinTUN bundled (no first-run download in the release zip).
+- Windows (WPF + legacy WinForms): stats sharing is now always on and cannot be disabled — the SHARE STATS toggle is removed; reporting, heartbeat and `bye` run on every connect.
 
-## [Unreleased] - 2026-11-16
+### Changed
+- Android stats uplink mirrors the Windows fix: report posts 2.5 s after "tunnel up" (DNS on the VPN interface needs a beat), retries once after 4 s on failure, logs the outcome in the activity card.
+- Windows stats uplink: 2.5 s settle after tunnel-up, one retry, post/heartbeat status logged; report payload now carries the pre-tunnel line identity (ISP/ASN/company/country/city) built before any routes flip — never the WARP exit.
 
-### Added
-- Native Windows build under `windows/`: .NET Framework WinForms app with the Android UI (CONNECT disc, endpoint/network readouts, speed test, activity log), engine cross-compiled for `windows/amd64`, WinTUN adapter, first-run WinTUN download, `warpscout tunnel` subcommand with stdin `quit` for clean teardown, single-instance, dark DWM title bar. Build: `.\windows\build.ps1`.
+### Fixed
+- Windows stats never reached the dashboard: reports went out empty-endpoint (rejected 400 by the worker) and later before adapter DNS was routable (`No such host is known`); the result was discarded as "Stats reported". Both fixed; reports verified on-line end-to-end (rows visible on the stats board).
+- NETWORK readout showed the WARP exit or nothing; it now shows the raw line (wrapped onto two lines when the org is long).
+- Ready-state CONNECT disc no longer draws the white specular cap.
 
 ## [1.0.1] - 2026-11-13
 

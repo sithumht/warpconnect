@@ -42,15 +42,15 @@ The activity log shows what the app is doing — endpoint scan results, verifica
 
 ## Windows
 
-A native Windows build ships in the repo under `windows/` — the same one-button UI as the Android app (navy gradient, the glowing CONNECT disc, identical activity log). Preferred path is the WPF port:
+A native Windows build ships in the repo under `windows/` - the same one-button UI as the Android app (navy gradient, the glowing CONNECT disc, identical activity log). **v1.0.2 is the first release with a downloadable Windows build**: grab `warpconnect-v1.0.2-windows.zip` from the [Releases](https://github.com/sithumht/warpconnect/releases/latest) page, extract it, and run `WARP Connect.exe` (Administrator required - WinTUN creates a virtual adapter; the .NET runtime is bundled, nothing else to install).
+
+Build it yourself with Go on PATH and the .NET 8 SDK:
 
 ```powershell
 .\windows\wpf\build.ps1
 ```
 
-Output (self-contained): `windows\wpf\bin\Release\` with `WARP Connect.exe` and the bundled engine. Requires Administrator (WinTUN creates a virtual adapter). The WinForms build under `windows\` is kept as a working fallback.
-
-Requires Go on PATH and .NET 8 SDK. First run downloads WinTUN from wintun.net. Honest limits: unsigned (SmartScreen warns until there's a code-signing cert), IPv4-only, and the desktop flow has only been validated per-machine — it is not part of the v1.0.1 release.
+Output (self-contained): `windows\wpf\bin\Release\` with `WARP Connect.exe` and the bundled engine. The WinForms build under `windows\src\` is kept as a working fallback. First run downloads WinTUN from wintun.net into the app folder; in the release zip it is bundled. Honest limits: unsigned (SmartScreen warns until there's a code-signing cert), IPv4-only, and the desktop flow has only been validated per-machine.
 
 The VPN engine is [warpscout](https://github.com/openwarpkit/warpscout-android)
 (MIT), compiled into a single gomobile AAR. `amneziawg-go` runs inside that AAR
