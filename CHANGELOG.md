@@ -3,6 +3,11 @@
 All notable changes to WARP Connect are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] - 2026-11-16
+
+### Added
+- Native Windows build under `windows/`: .NET Framework WinForms app with the Android UI (CONNECT disc, endpoint/network readouts, speed test, activity log), engine cross-compiled for `windows/amd64`, WinTUN adapter, first-run WinTUN download, `warpscout tunnel` subcommand with stdin `quit` for clean teardown, single-instance, dark DWM title bar. Build: `.\windows\build.ps1`.
+
 ## [1.0.1] - 2026-11-13
 
 First public release (APK via the Releases page).

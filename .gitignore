@@ -32,3 +32,7 @@ engine/.cache/
 # Wrangler local state (contains account metadata)
 .wrangler/
 website/.wrangler/
+
+# Windows build output
+windows/bin/
+

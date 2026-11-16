@@ -42,9 +42,13 @@ The activity log shows what the app is doing — endpoint scan results, verifica
 
 ## Windows
 
-A Windows desktop build is in active development. The Go engine already
-cross-compiles to `windows/amd64` and the WinTUN bring-up is written, but it is
-not part of any release yet.
+A native Windows build lives in the repo under `windows/` — the same one-button UI as the Android app (navy gradient, the glowing CONNECT disc, identical activity log). It uses the same Go engine cross-compiled for `windows/amd64`, with a WinTUN adapter for the tunnel. See [`windows/README.md`](windows/README.md) for build and usage:
+
+```powershell
+.\windows\build.ps1
+```
+
+Requires Go on PATH and Windows 10/11 with .NET Framework 4.x (present by default). The app itself needs Administrator (WinTUN creates a virtual adapter). Honest limits: unsigned (SmartScreen will warn until there's a code-signing cert), IPv4-only, and the desktop flow has not yet been validated across every Windows network. Not part of the v1.0.1 release — the release APK remains Android-only.
 
 The VPN engine is [warpscout](https://github.com/openwarpkit/warpscout-android)
 (MIT), compiled into a single gomobile AAR. `amneziawg-go` runs inside that AAR
