@@ -17,6 +17,8 @@ namespace WarpConnect {
         private int _heartbeatTicks;
         private bool _sequenceRunning;
         private OutboundReport? _connectIdentity;
+        private TunnelInfo? _networkInfo;
+        private volatile string _activeEndpoint = "";
 
         public MainWindow() {
             try {
@@ -26,6 +28,7 @@ namespace WarpConnect {
                 LogList.ItemsSource = _log;
                 Visibility = Visibility.Visible;
                 ApplyState(UiState.Ready);
+                RefreshPreTunnelInfoAsync();
                 UpdateStatsToggleUi();
                 AppendLog("Ready — tap the disc to connect through WARP.");
 
@@ -129,6 +132,7 @@ namespace WarpConnect {
                     TxtNetwork.Text = "—";
                     TxtSpeed.Text = "tap SPEED TEST to measure";
                     ApplyState(UiState.Ready);
+                    RefreshPreTunnelInfoAsync();
                     return;
 
                 case UiState.Preparing:
@@ -137,6 +141,7 @@ namespace WarpConnect {
                     AppendLog("Cancelled.");
                     _engine.StopTunnel();
                     ApplyState(UiState.Ready);
+                    RefreshPreTunnelInfoAsync();
                     return;
 
                 default: // Ready / Failed
@@ -478,6 +483,7 @@ namespace WarpConnect {
         }
 
         private bool TryConnectEndpoint(string endpoint) {
+            _activeEndpoint = endpoint;
             var p = _engine.StartTunnel(endpoint, "awg");
             if (p == null) {
                 AppendLogSafe(endpoint + " — could not start the tunnel process");
@@ -514,16 +520,17 @@ namespace WarpConnect {
             Dispatcher.Invoke(a);
         }
 
-        // ---------- Tunnel up / refresh ----------
+        // ---------- Network (pre-tunnel) info ----------
 
-        private async void RefreshNetworkInfoAsync() {
+        // Measured on the raw line, BEFORE the tunnel comes up: the VPN's exit
+        // is not the user's network, and the stats dashboard aggregates by line.
+        private async void RefreshPreTunnelInfoAsync() {
             try {
                 var info = await Net.FetchTunnelInfoAsync();
-                var latency = Net.PingMs("1.1.1.1", 2500);
-                var identity = BuildIdentity(info);
+                _networkInfo = info;
                 Dispatcher.Invoke(delegate {
                     if (!info.Ok) {
-                        TxtNetwork.Text = "connected — could not read exit info";
+                        TxtNetwork.Text = "could not read network info (the IP lookup is blocked here)";
                     } else {
                         var parts = new List<string>();
                         parts.Add(info.Ip);
@@ -534,13 +541,12 @@ namespace WarpConnect {
                         if (!string.IsNullOrEmpty(geo)) parts.Add(geo);
                         TxtNetwork.Text = string.Join("  |  ", parts.ToArray());
                     }
-                    TxtSpeed.Text = latency >= 0 ? (latency + " ms") : "ping unavailable";
                 });
-                await MaybeReport(identity, _settings.LastEndpoint ?? "");
             } catch (Exception e) {
-                AppendLog("exit info refresh failed: " + e.Message);
+                AppendLog("network info refresh failed: " + e.Message);
             }
         }
+
 
         private async System.Threading.Tasks.Task MaybeReport(OutboundReport id, string endpoint) {
             if (!_settings.ShareStats) return;
@@ -558,7 +564,7 @@ namespace WarpConnect {
             try { await Report.Bye(_settings.DeviceId); } catch { }
         }
 
-        private OutboundReport BuildIdentity(TunnelInfo info) {
+        private OutboundReport BuildIdentity(TunnelInfo? info) {
             var id = new OutboundReport();
             var ssid = WifiSsid();
             if (!string.IsNullOrEmpty(ssid)) { id.Transport = "wifi"; id.Ssid = ssid; } else { id.Transport = "eth"; }
@@ -621,11 +627,18 @@ namespace WarpConnect {
         // ---------- On tunnel up ----------
 
         private void OnTunnelUp() {
+            var ep = string.IsNullOrEmpty(_activeEndpoint) ? (_settings.LastEndpoint ?? "") : _activeEndpoint;
             Ui(delegate {
                 ApplyState(UiState.Connected);
-                AppendLog("WARP tunnel is up — IPv4 traffic now exits through " + (_settings.LastEndpoint ?? ""));
+                AppendLog("WARP tunnel is up — IPv4 traffic now exits through " + ep);
             });
-            RefreshNetworkInfoAsync();
+            var identity = BuildIdentity(_networkInfo);
+            // latency through the tunnel = the browsing path the user just got
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                var ms = Net.PingMs("1.1.1.1", 2500);
+                Dispatcher.Invoke(delegate { TxtSpeed.Text = ms >= 0 ? (ms + " ms") : "ping unavailable"; });
+            });
+            _ = MaybeReport(identity, ep);
         }
     }
 }
