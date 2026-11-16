@@ -1,5 +1,7 @@
 ﻿# WARP Connect
 
+<p align="center"><img src="docs/brand/warpconnect-cover.png" alt="WARP Connect — one-button Cloudflare WARP client for filtered networks (ATOM Myanmar)" width="100%" /></p>
+
 [![Latest release](https://img.shields.io/github/v/release/sithumht/warpconnect?label=latest)](https://github.com/sithumht/warpconnect/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-3DDC84)](https://developer.android.com/about/versions/oreo)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)

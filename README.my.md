@@ -1,5 +1,7 @@
 # WARP Connect (မြန်မာဘာသာ)
 
+<p align="center"><img src="docs/brand/warpconnect-cover.png" alt="WARP Connect — one-button Cloudflare WARP client for filtered networks (ATOM Myanmar)" width="100%" /></p>
+
 [English README](README.md) · [Releases](https://github.com/sithumht/warpconnect/releases)
 
 Android ဖုန်းထဲမှာ Button တစ်ခုတည်းနှိပ်ရုံနဲ့ Cloudflare WARP VPN ကို ချိတ်ဆက်ပေးတဲ့ အက်ပ်ဖြစ်ပါတယ်။ အင်တာနက် block / filter လုပ်ထားတဲ့ network များ (ဥပမာ ATOM Myanmar) မှာ အင်တာနက်ကို ပြန်ဖွင့်ပေးနိုင်ဖို့ ရည်ရွယ်ပါတယ်။
