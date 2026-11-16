@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -354,6 +354,13 @@ namespace WarpConnect {
         }
 
         private void AppendLog(string line) {
+            // WPF forbids mutating an ObservableCollection bound as ItemsSource
+            // from any thread except the Dispatcher thread. Worker threads use
+            // this directly — marshal to the Dispatcher instead of crashing.
+            if (!Dispatcher.CheckAccess()) {
+                Dispatcher.Invoke(new Action<string>(AppendLog), line);
+                return;
+            }
             var kind = LogKindFor(line);
             _log.Add(new LogEntry { Text = DateTime.Now.ToString("HH:mm:ss") + "  " + line, KindBrush = kind });
             while (_log.Count > 60) _log.RemoveAt(0);
@@ -392,7 +399,7 @@ namespace WarpConnect {
                     return;
                 }
 
-                // 1) Account
+                // 1) Account — register if missing
                 if (!System.IO.File.Exists(_settings.AccountPath)) {
                     Ui(delegate { AppendLog("No WARP account — registering (direct API, relays, tunnel fallback)…"); ApplyState(UiState.Preparing); });
                     var rc = _engine.Run(new List<string> { "register", "-a", _settings.AccountPath, "-plain" }, 600000);
@@ -404,26 +411,7 @@ namespace WarpConnect {
                     Ui(delegate { AppendLog("Account registered."); });
                 }
 
-                // 2) Endpoint — cached winner, else scan
-                var ep = _settings.LastEndpoint;
-                if (!LooksLikeEndpoint(ep)) ep = null;
-                if (ep == null) {
-                    Ui(delegate { ApplyState(UiState.Scanning); AppendLog("Scanning for endpoints (AWG) — this can take a few minutes on a filtered line…"); });
-                    var res = _engine.RunCapture(new List<string> { "scan", "-best", "-plain", "-n", "2", "-t", "6", "-a", _settings.AccountPath }, 300000);
-                    ep = TryStandaloneEndpoint(res.StdOut + "\n" + res.StdErr);
-                    if (ep == null) {
-                        Ui(delegate { ApplyState(UiState.Failed); });
-                        AppendLogSafe("No endpoint passed verification on this network. Try a different Wi-Fi or cellular network.");
-                        return;
-                    }
-                    _settings.LastEndpoint = ep;
-                    _settings.Save();
-                    Ui(delegate { AppendLog("Scan picked " + ep); });
-                } else {
-                    Ui(delegate { AppendLog("Trying cached winner " + ep); });
-                }
-
-                // 3) WinTUN
+                // 2) WinTUN
                 var wtError = Wintun.Ensure(AppDomain.CurrentDomain.BaseDirectory, AppendLogSafe);
                 if (wtError != null) {
                     AppendLogSafe(wtError);
@@ -431,18 +419,82 @@ namespace WarpConnect {
                     return;
                 }
 
-                // 4) Bring up the tunnel
-                Ui(delegate {
-                    ApplyState(UiState.Connecting);
-                    TxtEndpoint.Text = ep;
-                    _engine.StartTunnel(ep, "awg");
-                    AppendLog("Dialing " + ep + " (AmneziaWG)…");
-                });
+                // 3) Endpoint ladder — cached winner first, then bundled seeds,
+                //    then escalate to a full scan if neither works.
+                var candidates = new List<string>();
+                if (LooksLikeEndpoint(_settings.LastEndpoint)) candidates.Add(_settings.LastEndpoint);
+                foreach (var s in Seeds.Endpoints) if (!candidates.Contains(s)) candidates.Add(s);
+
+                bool up = false;
+                string? winner = null;
+                for (int i = 0; i < candidates.Count && !up; i++) {
+                    var candidate = candidates[i];
+                    Ui(delegate {
+                        ApplyState(UiState.Connecting);
+                        TxtEndpoint.Text = candidate;
+                        AppendLog("Dialing " + candidate + " (AmneziaWG)…");
+                    });
+                    if (TryConnectEndpoint(candidate)) {
+                        up = true;
+                        winner = candidate;
+                        AppendLogSafe(candidate + " — connected.");
+                        break;
+                    }
+                    AppendLogSafe(candidate + " — no handshake, trying next endpoint…");
+                }
+
+                // 4) Last resort — scan
+                if (!up) {
+                    Ui(delegate { ApplyState(UiState.Scanning); AppendLog("Scanning for endpoints (AWG) — this can take a few minutes on a filtered line…"); });
+                    var res = _engine.RunCapture(new List<string> { "scan", "-best", "-plain", "-n", "2", "-t", "6", "-a", _settings.AccountPath }, 300000);
+                    var ep = TryStandaloneEndpoint(res.StdOut + "\n" + res.StdErr);
+                    if (ep != null) {
+                        AppendLogSafe("Scan found " + ep + " — dialling it…");
+                        Ui(delegate {
+                            ApplyState(UiState.Connecting);
+                            TxtEndpoint.Text = ep;
+                            AppendLog("Dialing " + ep + " (AmneziaWG)…");
+                        });
+                        if (TryConnectEndpoint(ep)) { up = true; winner = ep; }
+                    }
+                }
+
+                if (!up) {
+                    Ui(delegate { ApplyState(UiState.Failed); });
+                    AppendLogSafe("No endpoint answered on this network — all seeds and the scan failed. Try a different Wi-Fi or cellular network.");
+                    return;
+                }
+
+                // 5) Persist winner for next time
+                if (winner != null && winner != _settings.LastEndpoint) {
+                    _settings.LastEndpoint = winner;
+                    _settings.Save();
+                }
             } catch (Exception e) {
                 Trace("ConnectSequence EXCEPTION: " + e);
                 AppendLogSafe("Connect failed: " + e.Message);
                 Ui(delegate { ApplyState(UiState.Failed); });
             }
+        }
+
+        private bool TryConnectEndpoint(string endpoint) {
+            var p = _engine.StartTunnel(endpoint, "awg");
+            if (p == null) {
+                AppendLogSafe(endpoint + " — could not start the tunnel process");
+                return false;
+            }
+            // warpscout tunnel exits non-zero on handshake timeout (~20 s);
+            // give it a bit of headroom for the timeout itself + teardown.
+            var deadline = DateTime.Now.AddSeconds(22);
+            while (DateTime.Now < deadline) {
+                if (p.HasExited) {
+                    AppendLogSafe(endpoint + " — process exited early (handshake timeout or error)");
+                    return false;
+                }
+                System.Threading.Thread.Sleep(200);
+            }
+            // Still running after timeout — the endpoint answered and the engine is holding the tunnel.
+            return true;
         }
 
         private string TryStandaloneEndpoint(string text) {

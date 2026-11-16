@@ -8,6 +8,7 @@
     <RootNamespace>WarpConnect</RootNamespace>
     <AssemblyName>WARP Connect</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>warpconnect.ico</ApplicationIcon>
     <Optimize>true</Optimize>
     <Version>1.0.1.0</Version>
     <FileVersion>1.0.1.0</FileVersion>

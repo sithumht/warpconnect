@@ -103,8 +103,8 @@ func runTunnelCmd(ctx context.Context, opts options) error {
 			break
 		}
 		if time.Now().After(deadline) {
-			fmt.Fprintln(os.Stderr, errPal.fail(fmt.Sprintf("no handshake within %s â€” routes are up but the endpoint is not answering; Ctrl+C to tear down", handshakeWait)))
-			break
+			fmt.Fprintln(os.Stderr, errPal.fail(fmt.Sprintf("no handshake within %s — routes are up but the endpoint is not answering", handshakeWait)))
+			return errHandshakeTimeout
 		}
 		time.Sleep(pollInterval)
 	}
@@ -139,6 +139,8 @@ const (
 	pollInterval   = 500 * time.Millisecond
 	statsInterval  = 30 * time.Second
 )
+
+var errHandshakeTimeout = errors.New("tunnel handshake did not complete in time")
 
 func readTunnelStats() (tunnelStats, error) {
 	var st tunnelStats
