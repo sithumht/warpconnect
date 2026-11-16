@@ -244,7 +244,6 @@ namespace WarpConnect {
             TxtDiscCaption.Text = discCaption;
             TxtDiscSub.Text = discSub;
             DiscGlow.Fill = discGlow;
-            DiscInner.Visibility = s == UiState.Ready ? Visibility.Visible : Visibility.Collapsed;
             DiscFill.Fill = discFill;
             DiscRing.Stroke = discRing;
             DiscRing.Opacity = 0.6;

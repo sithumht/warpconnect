@@ -176,8 +176,6 @@
                         </Ellipse.Effect>
                     </Ellipse>
 
-                    <Ellipse x:Name="DiscInner" Width="176" Height="34" VerticalAlignment="Top" Margin="0,16,0,0" Fill="#FFFFFF" Opacity="0.35" />
-
                     <StackPanel x:Name="DiscTextPanel" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
                         <TextBlock x:Name="TxtDiscCaption" Text="CONNECT" FontFamily="Segoe UI" FontWeight="Bold" FontSize="22" Foreground="#04121F" HorizontalAlignment="Center" />
                         <TextBlock x:Name="TxtDiscSub" Text="" FontFamily="Segoe UI" FontWeight="SemiBold" FontSize="10" Foreground="#0B2A3A" HorizontalAlignment="Center" Opacity="0.85" Margin="0,2,0,0" />
