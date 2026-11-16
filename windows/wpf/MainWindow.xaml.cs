@@ -15,6 +15,7 @@ namespace WarpConnect {
         private readonly Engine _engine;
         private UiState _state = UiState.Ready;
         private int _heartbeatTicks;
+        private bool _sequenceRunning;
         private OutboundReport? _connectIdentity;
 
         public MainWindow() {
@@ -58,12 +59,10 @@ namespace WarpConnect {
 
         // ---------- Window chrome ----------
 
-        private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
-            try { DragMove(); } catch { }
-        }
+        private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) { /* intentionally empty; drag is title-bar only */ }
 
         private void TitleBar_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
-            if (e.ClickCount == 2) { ToggleMaximize(); return; }
+            if (e.ChangedButton != System.Windows.Input.MouseButton.Left) return;
             try { DragMove(); } catch { }
         }
 
@@ -108,8 +107,17 @@ namespace WarpConnect {
             ClickDisc();
         }
 
+        private static void Trace(string line) {
+            try {
+                var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "warpconnect-trace.log");
+                System.IO.File.AppendAllText(path, DateTime.Now.ToString("HH:mm:ss.fff") + " " + line + "\n");
+            } catch { }
+        }
+
         private void ClickDisc() {
-            switch (_state) {
+            Trace("ClickDisc entered; state=" + _state);
+            try {
+                switch (_state) {
                 case UiState.Connected:
                     AppendLog("Disconnecting…");
                     ByeStats();
@@ -132,10 +140,17 @@ namespace WarpConnect {
                     return;
 
                 default: // Ready / Failed
+                    if (_sequenceRunning) { AppendLogSafe("Connect already in progress — wait for it to finish."); return; }
+                    _sequenceRunning = true;
                     AppendLog("Connect requested.");
                     ApplyState(UiState.Preparing);
+                    Trace("state=Preparing applied; starting sequence");
                     StartConnectSequence();
                     return;
+            }
+            } catch (Exception ex) {
+                Trace("ClickDisc EXCEPTION: " + ex);
+                throw;
             }
         }
 
@@ -363,6 +378,15 @@ namespace WarpConnect {
 
         private void ConnectSequence() {
             try {
+                Trace("ConnectSequence started");
+                ConnectSequenceInner();
+            } finally {
+                _sequenceRunning = false;
+            }
+        }
+
+        private void ConnectSequenceInner() {
+            try {
                 if (!_engine.IsAvailable) {
                     Ui(delegate { AppendLog("warpscout.exe is missing from this install folder — reinstall WARP Connect."); ApplyState(UiState.Failed); });
                     return;
@@ -415,6 +439,7 @@ namespace WarpConnect {
                     AppendLog("Dialing " + ep + " (AmneziaWG)…");
                 });
             } catch (Exception e) {
+                Trace("ConnectSequence EXCEPTION: " + e);
                 AppendLogSafe("Connect failed: " + e.Message);
                 Ui(delegate { ApplyState(UiState.Failed); });
             }

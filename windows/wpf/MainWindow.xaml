@@ -9,7 +9,6 @@
         ResizeMode="CanMinimize"
         WindowStyle="None"
         Background="#0B1220"
-        MouseDown="Window_MouseDown"
         KeyboardNavigation.DirectionalNavigation="Cycle">
 
     <Window.Resources>

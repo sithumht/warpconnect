@@ -6,7 +6,7 @@
 # Output: windows\warp-connect-wpf\bin\Release\ ; warpscout.exe is copied into the output.
 
 $ErrorActionPreference = "Stop"
-$repo = Split-Path -Parent $PSScriptRoot
+$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $outDir = Join-Path $PSScriptRoot "bin\Release"
 
 Write-Output "== Clean =="
@@ -25,7 +25,8 @@ Write-Output "== Copy engine into WPF project =="
 Copy-Item (Join-Path $outDir "warpscout.exe") (Join-Path $PSScriptRoot "warpscout.exe") -Force
 
 Write-Output "== dotnet publish =="
-$sdk = if ($env:DOTNET) { $env:DOTNET } elseif (Get-Command dotnet -ErrorAction SilentlyContinue) { "dotnet" } elseif (Test-Path "$env:USERPROFILE\dotnet-portable\dotnet.exe") { "$env:USERPROFILE\dotnet-portable\dotnet.exe" } else { throw "dotnet 8 SDK not found; install .NET 8 SDK or set DOTNET=C:\path\to\dotnet.exe" }
+$portableSdk = "$env:USERPROFILE\dotnet-portable\dotnet.exe"
+$sdk = if ($env:DOTNET) { $env:DOTNET } elseif (Test-Path $portableSdk) { $portableSdk } elseif (Get-Command dotnet -ErrorAction SilentlyContinue) { "dotnet" } else { throw "dotnet SDK not found; install .NET 8 SDK or set DOTNET=C:\path\to\dotnet.exe" }
 & $sdk publish -c Release -o $outDir $PSScriptRoot
 if ($LASTEXITCODE -ne 0) { throw "WPF publish failed" }
 

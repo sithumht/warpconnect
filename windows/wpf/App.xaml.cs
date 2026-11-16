@@ -9,6 +9,19 @@ namespace WarpConnect {
         }
 
         protected override void OnStartup(StartupEventArgs e) {
+            Dispatcher.UnhandledException += delegate(object? s, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs args) {
+                try {
+                    File.AppendAllText(Path.Combine(Path.GetTempPath(), "warpconnect-wpf-crash.log"),
+                        DateTime.Now.ToString("HH:mm:ss") + " dispatcher exception:\n" + args.Exception + "\n\n");
+                } catch { }
+                args.Handled = true; // keep the UI alive
+            };
+            AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs args) {
+                try {
+                    File.AppendAllText(Path.Combine(Path.GetTempPath(), "warpconnect-wpf-crash.log"),
+                        DateTime.Now.ToString("HH:mm:ss") + " domain exception:\n" + args.ExceptionObject + "\n\n");
+                } catch { }
+            };
             base.OnStartup(e);
             // StartupUri processing silently no-ops on some hosts; create the
             // window explicitly so the app always launches.
