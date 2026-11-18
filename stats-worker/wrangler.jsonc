@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "warpconnect-stats",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-11",
+  "keep_vars": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "warpconnect-stats",
+      "database_id": "d8434945-1997-4e59-a69a-a08e9e1f956e"
+    }
+  ]
+}

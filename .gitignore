@@ -44,3 +44,7 @@ windows/wpf/obj/
 windows/wpf/warpscout.exe
 
 website/node_modules/
+stats-worker/node_modules/
+stats-worker/.wrangler/
+stats-worker/.dev.vars
+stats-worker/*.out
