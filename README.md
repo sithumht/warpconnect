@@ -1,4 +1,4 @@
-﻿# WARP Connect
+# WARP Connect
 
 <p align="center"><img src="docs/brand/warpconnect-cover.png" alt="WARP Connect — one-button Cloudflare WARP client for filtered networks (ATOM Myanmar)" width="100%" /></p>
 

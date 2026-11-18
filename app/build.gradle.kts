@@ -22,8 +22,8 @@ android {
         applicationId = "com.warpconnect.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.0.3"
+        versionCode = 4
+        versionName = "1.0.4"
         ndk {
             abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }

@@ -3,6 +3,25 @@
 All notable changes to WARP Connect are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] - 2026-11-18
+
+### Added
+- Android: PERSISTENCE card on the Ready screen — requests "Use battery
+  without restrictions" (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS),
+  links straight into Android VPN settings for the Always-on toggle.
+  Both rails verified on device; re-checks on screen resume.
+- Android: pre-tunnel network info shows on the Ready screen
+  ("37.111.44.90 | AS133385 (Atom Myanmar Limited) | MM | Yangon") via an
+  HTTPS-first fallback chain (ipwho.is -> ifconfig.co -> api.ipapi.is)
+  sampled before the VPN comes up; falls back to a carrier-only line when
+  HTTPS is unreachable.
+
+### Changed
+- In-app ACTIVITY log removed from Android and Windows (diagnostics now
+  land in %TEMP%\warpconnect-trace.log); the tunnel-up marker detection
+  remains wired to the trace hook.
+- Windows: NETWORK readout retains the two-line wrap rules from 1.0.2.
+
 ## [1.0.3] - 2026-11-18
 
 ### Fixed
