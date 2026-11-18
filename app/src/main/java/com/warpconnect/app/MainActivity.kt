@@ -33,6 +33,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,6 +66,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -366,6 +370,8 @@ private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit, onSpeedTest: ()
                 Spacer(Modifier.height(10.dp))
             }
 
+            PersistenceCard(phase = state.phase)
+
             Surface(
                 color = Color(0xFF0B1220),
                 shape = RoundedCornerShape(18.dp),
@@ -412,6 +418,94 @@ private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit, onSpeedTest: ()
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+@Composable
+private fun PersistenceCard(phase: Phase) {
+    val context = LocalContext.current
+    var show by remember { mutableStateOf(Persistence.shouldShow(context)) }
+    var batteryOk by remember { mutableStateOf(Persistence.isUnrestricted(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        batteryOk = Persistence.isUnrestricted(context)
+    }
+
+    if (phase != Phase.IDLE || !show) return
+
+    Surface(
+        color = Color(0xFF0E1E36),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color(0xFF1E2B45)),
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    text = "PERSISTENCE",
+                    fontSize = 10.sp,
+                    letterSpacing = 2.sp,
+                    color = Color(0xFF6B7A93),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "DISMISS",
+                    fontSize = 9.sp,
+                    letterSpacing = 1.sp,
+                    color = Color(0xFF5D6B80),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable {
+                            Persistence.hide(context)
+                            show = false
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    text = if (batteryOk) "✓ Battery: unrestricted — Android won't park the tunnel"
+                           else "Battery: optimized — Android may pause the tunnel",
+                    fontSize = 11.sp,
+                    color = if (batteryOk) Color(0xFF34D399) else Color(0xFFFBBF24),
+                    modifier = Modifier.weight(1f),
+                )
+                if (!batteryOk) {
+                    Text(
+                        text = "GRANT",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        color = Color(0xFF38BDF8),
+                        modifier = Modifier
+                            .clickable { context.startActivity(Persistence.batterySettingsIntent(context)) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(
+                    text = "Reboot-proof: Android Settings → VPN → WARP Connect → Always-on",
+                    fontSize = 11.sp,
+                    color = Color(0xFF92A4BE),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "OPEN",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = Color(0xFF38BDF8),
+                    modifier = Modifier
+                        .clickable { context.startActivity(Persistence.alwaysOnVpnIntent()) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }
