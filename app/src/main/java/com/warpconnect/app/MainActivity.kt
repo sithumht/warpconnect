@@ -372,43 +372,7 @@ private fun WarpScreen(state: WarpUiState, onToggle: () -> Unit, onSpeedTest: ()
 
             PersistenceCard(phase = state.phase)
 
-            Surface(
-                color = Color(0xFF0B1220),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "ACTIVITY",
-                        fontSize = 10.sp,
-                        letterSpacing = 2.sp,
-                        color = Color(0xFF6B7A93),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    if (state.log.isEmpty()) {
-                        Text(
-                            text = "Nothing yet.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF5D6B80),
-                        )
-                    } else {
-                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                            state.log.forEach { line ->
-                                Text(
-                                    text = "• $line",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF92A4BE),
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(vertical = 3.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
+            Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(10.dp))
             Text(
                 text = "Developed by Sithu",

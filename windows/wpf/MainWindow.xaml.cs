@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
@@ -26,7 +25,6 @@ namespace WarpConnect {
                 _settings = Settings.Load();
                 _engine = new Engine(_settings.AccountPath, AppendLogSafe);
                 InitializeComponent();
-                LogList.ItemsSource = _log;
                 Visibility = Visibility.Visible;
                 ApplyState(UiState.Ready);
                 RefreshPreTunnelInfoAsync();
@@ -325,49 +323,21 @@ namespace WarpConnect {
             };
         }
 
-        // ---------- Activity log ----------
+        // ---------- Trace ----------
 
-        public class LogEntry {
-            public string Text { get; set; } = "";
-            public Brush KindBrush { get; set; } = Brushes.LightSteelBlue;
-        }
-
-        private readonly ObservableCollection<LogEntry> _log = new ObservableCollection<LogEntry>();
-
+        // The in-app activity log was removed; diagnostics now live in
+        // %TEMP%\warpconnect-trace.log. The engine's tunnel-up marker is
+        // still caught here to switch the UI to Connected.
         private void AppendLogSafe(string line) {
-            try {
-                Dispatcher.Invoke(new Action(() => AppendLog(line)));
-            } catch { }
+            try { AppendLog(line); } catch { }
         }
 
         private void AppendLog(string line) {
-            // WPF forbids mutating an ObservableCollection bound as ItemsSource
-            // from any thread except the Dispatcher thread. Worker threads use
-            // this directly — marshal to the Dispatcher instead of crashing.
-            if (!Dispatcher.CheckAccess()) {
-                Dispatcher.Invoke(new Action<string>(AppendLog), line);
-                return;
-            }
-            var kind = LogKindFor(line);
-            _log.Add(new LogEntry { Text = DateTime.Now.ToString("HH:mm:ss") + "  " + line, KindBrush = kind });
-            while (_log.Count > 60) _log.RemoveAt(0);
-            LogList.UpdateLayout();
-            if (LogList.Items.Count > 0) LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
-            // Watch for the engine's handshake-OK marker — that's the real tunnel-up signal.
+            Trace(line);
             if (_state == UiState.Connecting && line != null && line.Contains("WARP tunnel is up")) {
                 OnTunnelUp();
             }
         }
-
-        private Brush LogKindFor(string line) {
-            var lower = line.ToLowerInvariant();
-            if (lower.Contains("verified") || lower.Contains("tunnel is up") || lower.Contains("handshake")) return new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
-            if (lower.Contains("failed") || lower.Contains("no handshake") || lower.Contains("did not pass")) return new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D));
-            if (lower.Contains("stats reported")) return new SolidColorBrush(Color.FromRgb(0x7D, 0xF3, 0xD8));
-            if (lower.Contains("cancel")) return new SolidColorBrush(Color.FromRgb(0x8F, 0xA6, 0xC8));
-            return new SolidColorBrush(Color.FromRgb(0xA9, 0xB8, 0xCF));
-        }
-
         // ---------- Connect flow ----------
 
         private void ConnectSequence() {

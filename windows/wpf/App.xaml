@@ -23,8 +23,7 @@
         <Color x:Key="OnSurface">#E6EDF7</Color>
         <Color x:Key="Muted">#A9B8CF</Color>
         <Color x:Key="MutedDim">#7A88A3</Color>
-        <Color x:Key="LogGreen">#34D399</Color>
-        <Color x:Key="LogAmber">#FCD34D</Color>
+
         <Color x:Key="DangerSurface">#2A1215</Color>
 
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Surface}" />
@@ -39,8 +38,7 @@
         <SolidColorBrush x:Key="OnSurfaceBrush" Color="{StaticResource OnSurface}" />
         <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource Muted}" />
         <SolidColorBrush x:Key="MutedDimBrush" Color="{StaticResource MutedDim}" />
-        <SolidColorBrush x:Key="LogGreenBrush" Color="{StaticResource LogGreen}" />
-        <SolidColorBrush x:Key="LogAmberBrush" Color="{StaticResource LogAmber}" />
+
 
         <FontFamily x:Key="DisplayFont">Segoe UI</FontFamily>
         <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
