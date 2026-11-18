@@ -409,9 +409,22 @@ namespace WarpConnect {
                     return;
                 }
 
-                // 3) Endpoint ladder — cached winner first, then bundled seeds,
+                // 3) Endpoint ladder — stats-board ASN recommendation first (field
+                //    data for this exact line), then cached winner, then seeds,
                 //    then escalate to a full scan if neither works.
+                var lineInfo = EnsureNetworkInfoAsync().GetAwaiter().GetResult();
+                var recTransport = string.IsNullOrEmpty(WifiSsid()) ? "eth" : "wifi";
+                string? recommended = null;
+                try {
+                    recommended = Net.FetchStatsRecommendationAsync(recTransport,
+                        lineInfo != null && lineInfo.Ok ? lineInfo.Asn : null,
+                        lineInfo != null && lineInfo.Ok ? lineInfo.AsnOrg : null).GetAwaiter().GetResult();
+                } catch (Exception e) { Trace("recommendation lookup failed: " + e.Message); }
+                if (!string.IsNullOrEmpty(recommended)) AppendLogSafe("Stats board recommends " + recommended + " for " + recTransport + ((lineInfo != null && !string.IsNullOrEmpty(lineInfo.Asn)) ? " · " + lineInfo.Asn : "") + " — trying it first.");
+                else AppendLogSafe("No ASN-matched recommendation on the stats board — trying the usual candidates.");
+
                 var candidates = new List<string>();
+                if (!string.IsNullOrEmpty(recommended)) candidates.Add(recommended);
                 if (LooksLikeEndpoint(_settings.LastEndpoint)) candidates.Add(_settings.LastEndpoint);
                 foreach (var s in Seeds.Endpoints) if (!candidates.Contains(s)) candidates.Add(s);
 

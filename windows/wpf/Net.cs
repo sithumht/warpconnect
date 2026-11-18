@@ -106,6 +106,29 @@ namespace WarpConnect {
             }
         }
 
+        // Ask the stats board which endpoint has carried traffic on this
+        // line before (matched by ASN, falling back to the ISP string).
+        // Mirrors the Android fast path. Any failure is non-fatal — null.
+        public static async Task<string?> FetchStatsRecommendationAsync(string transport, string? asn, string? isp) {
+            try {
+                string? q = null;
+                if (!string.IsNullOrEmpty(asn)) q = "asn=" + Uri.EscapeDataString(asn);
+                else if (!string.IsNullOrEmpty(isp)) q = "isp=" + Uri.EscapeDataString(isp);
+                if (q == null) return null;
+                var json = await _http.GetStringAsync("https://warpconnect-stats.sithu-mhtvps.workers.dev/recommended?transport=" + transport + "&" + q);
+                using (var doc = JsonDocument.Parse(json)) {
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("endpoint", out var epProp)) return null;
+                    var ep = epProp.ValueKind == JsonValueKind.String ? epProp.GetString() : null;
+                    if (string.IsNullOrEmpty(ep)) return null;
+                    return System.Text.RegularExpressions.Regex.IsMatch(ep, "^\\d{1,3}(\\.\\d{1,3}){3}:\\d{1,5}$") ? ep : null;
+                }
+            } catch (Exception e) {
+                Debug.WriteLine("recommendation fetch failed: " + e.Message);
+                return null;
+            }
+        }
+
         public static async Task<double> MeasureMbpsAsync(long bytes, CancellationToken cancellationToken = default) {
             var url = string.Format("https://speed.cloudflare.com/__down?bytes={0}", bytes);
             var sw = Stopwatch.StartNew();
