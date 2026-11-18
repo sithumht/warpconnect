@@ -8,11 +8,30 @@ import java.net.URL
 
 /**
  * Best-effort network info from the plain network, done before the tunnel
- * comes up. One pre-flight: an IP echo via Cloudflare's trace, then a single
- * HTTPS lookup against api.ipapi.is (free, no key). Any failure yields null —
- * never blocks or leaks errors at the UI.
+ * comes up. HTTPS-first chain (all of these return the caller's IP and
+ * AS/org/country/city in one call):
+ *   ipwho.is  ->  ifconfig.co/json  ->  api.ipapi.is
+ * Any single failure is skipped; total failure returns null and the caller
+ * falls back to the locally known carrier identity.
  */
 object Isp {
+
+    /** Carrier-only summary built from the locally known identity — used
+     *  when every HTTPS lookup fails so the NETWORK line never renders blank. */
+    fun describeIdentity(ident: Report.Identity?): String? {
+        return buildString {
+            when (ident?.transport) {
+                "wifi" -> append(ident.ssid?.takeIf { it.isNotBlank() } ?: "Wi-Fi")
+                "cell" -> {
+                    append(ident.carrier?.takeIf { it.isNotBlank() } ?: "Cellular")
+                    ident.mccmnc?.takeIf { it.isNotBlank() }?.let { append(" (").append(it).append(")") }
+                }
+                "eth" -> append("Ethernet")
+                else -> if (ident != null) append(ident.transport) else append("unknown")
+            }
+            ident?.country?.takeIf { it.isNotBlank() }?.let { append(" | ").append(it) }
+        }.takeIf { it.isNotBlank() && it != "unknown" }
+    }
 
     data class NetInfo(
         val ip: String,
@@ -25,70 +44,102 @@ object Isp {
     ) {
         /** e.g. "45.117.1.2 | AS9560 (MPT) | Myanmar | Yangon" */
         fun describe(): String = buildString {
-            append(ip)
+            val sep = " | "
+            if (ip.isNotBlank()) append(ip)
+            var needSep = ip.isNotBlank()
             if (asn.isNotBlank()) {
-                append(" | ").append(asn)
+                if (needSep) append(sep)
+                append(asn)
                 if (asnOrg.isNotBlank()) append(" (").append(asnOrg).append(")")
+                needSep = true
             }
-            if (country.isNotBlank()) append(" | ").append(country)
-            if (city.isNotBlank()) append(" | ").append(city)
+            if (country.isNotBlank()) {
+                if (needSep) append(sep)
+                append(country)
+                needSep = true
+            }
+            if (city.isNotBlank()) {
+                if (needSep) append(sep)
+                append(city)
+            }
         }
     }
 
     suspend fun find(): NetInfo? = withContext(Dispatchers.IO) {
-        val ip = detectExternalIp() ?: return@withContext null
-        lookup(ip)
+        fetchIpWhoIs() ?: fetchIfconfigCo() ?: fetchIpApiIs()
     }
 
-    private fun detectExternalIp(): String? {
-        return try {
-            val conn = (URL("https://1.1.1.1/cdn-cgi/trace").openConnection() as? HttpURLConnection) ?: return null
-            conn.connectTimeout = 4_000
-            conn.readTimeout = 4_000
+    // ---------- providers ----------
+
+    private fun fetchIpWhoIs(): NetInfo? = runCatching {
+        val body = httpGet("https://ipwho.is/") ?: return null
+        val root = JSONObject(body)
+        if (root.has("success") && !root.optBoolean("success")) return null
+        val conn = root.optJSONObject("connection")
+        val asnNum = conn?.optInt("asn", -1)?.takeIf { it > 0 } ?: -1
+        val asn = if (asnNum > 0) "AS$asnNum" else ""
+        val org = conn?.optString("org")?.takeIf { it.isNotBlank() }
+            ?: conn?.optString("isp")?.takeIf { it.isNotBlank() }
+            ?: ""
+        NetInfo(
+            ip = root.optString("ip").ifBlank { "" },
+            asn = asn,
+            asnOrg = org,
+            isp = org,
+            country = root.optString("country_code").ifBlank { "" },
+            city = root.optString("city").ifBlank { "" },
+            timezone = root.optJSONObject("timezone")?.optString("id")?.ifBlank { "" } ?: "",
+        )
+    }.getOrNull()
+
+    private fun fetchIfconfigCo(): NetInfo? = runCatching {
+        val body = httpGet("https://ifconfig.co/json") ?: return null
+        val root = JSONObject(body)
+        NetInfo(
+            ip = root.optString("ip").ifBlank { "" },
+            asn = root.optString("asn").ifBlank { "" },
+            asnOrg = root.optString("asn_org").ifBlank { "" },
+            isp = root.optString("asn_org").ifBlank { "" },
+            country = root.optString("country_iso").ifBlank { "" },
+            city = "",
+            timezone = root.optString("time_zone").ifBlank { "" },
+        )
+    }.getOrNull()
+
+    private fun fetchIpApiIs(): NetInfo? = runCatching {
+        val body = httpGet("https://api.ipapi.is/") ?: return null
+        val root = JSONObject(body)
+        val asnObj = root.optJSONObject("asn")
+        val asn = asnObj?.optString("asn")?.takeIf { it.isNotBlank() } ?: ""
+        val org = asnObj?.optString("org")?.takeIf { it.isNotBlank() }
+            ?: root.optJSONObject("company")?.optString("name")?.takeIf { it.isNotBlank() }
+            ?: ""
+        val location = root.optJSONObject("location")
+        NetInfo(
+            ip = root.optString("ip").ifBlank { "" },
+            asn = asn,
+            asnOrg = org,
+            isp = org,
+            country = location?.optString("country_code")?.ifBlank { "" } ?: "",
+            city = location?.optString("city")?.ifBlank { "" } ?: "",
+            timezone = location?.optString("timezone")?.ifBlank { "" } ?: "",
+        )
+    }.getOrNull()
+
+    // ---------- helpers ----------
+
+    private fun httpGet(url: String, timeoutMs: Int = 5_000): String? = try {
+        val conn = (URL(url).openConnection() as? HttpURLConnection) ?: return null
+        try {
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
             conn.requestMethod = "GET"
-            val text = conn.inputStream.bufferedReader().readText()
-            Regex("""(?m)^ip=([^\r\n]+)""").find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
-        } catch (_: Exception) {
-            null
+            conn.setRequestProperty("Accept", "application/json")
+            if (conn.responseCode in 200..299) conn.inputStream.bufferedReader().readText() else null
+        } finally {
+            conn.disconnect()
         }
-    }
-
-    private fun lookup(ip: String): NetInfo? {
-        return try {
-            val url = URL("https://api.ipapi.is/?ip=$ip")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 4_000
-                readTimeout = 4_000
-                requestMethod = "GET"
-                setRequestProperty("Accept", "application/json")
-            }
-            if (conn.responseCode !in 200..299) return null
-            val body = conn.inputStream.bufferedReader().readText()
-            val root = JSONObject(body)
-
-            // "asn": "AS132167 Nine Communications Company Limited"
-            val asnRaw = root.optString("asn").trim()
-            val (asnNumber, asnOrg) = splitAsn(asnRaw)
-
-            NetInfo(
-                ip = root.optString("ip", ip).ifBlank { ip },
-                asn = asnNumber,
-                asnOrg = asnOrg,
-                isp = root.optString("company").ifBlank { asnOrg },
-                country = root.optString("country").ifBlank { "" },
-                city = root.optString("city").ifBlank { "" },
-                timezone = root.optString("timezone").ifBlank { "" },
-            )
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun splitAsn(raw: String): Pair<String, String> {
-        if (raw.isBlank()) return "" to ""
-        // Accept "AS132167 Org Name", "as132167,", or "AS132167".
-        val idx = raw.indexOfFirst { it.isWhitespace() }
-        if (idx < 0) return raw to ""
-        return raw.substring(0, idx).trim() to raw.substring(idx + 1).trim()
+    } catch (_: Exception) {
+        null
     }
 }

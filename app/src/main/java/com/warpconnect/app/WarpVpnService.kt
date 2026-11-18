@@ -17,6 +17,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -138,6 +139,20 @@ class WarpVpnService : VpnService() {
         store = Store(this)
         createChannel()
         registerNetworkWatchdog()
+        // Pre-probe the raw line so the Ready screen shows the network
+        // (carrier/ASN/country) before any tunnel exists. Show the carrier
+        // summary immediately (synchronous, no I/O) and try the HTTPS lookup
+        // afterwards — if the line blocks the providers, the carrier stays.
+        scope.launch {
+            val identity = runCatching { store.reportIdentity() }.getOrNull()
+            Log.d("warpconnect", "probe: identity=${identity}")
+            val fallback = Isp.describeIdentity(identity)
+            Log.d("warpconnect", "probe: fallback=$fallback")
+            fallback?.let { fb -> WarpHub.update { it.copy(netInfo = fb) } }
+            val info = Isp.find()
+            Log.d("warpconnect", "probe: isp=${info?.describe()}")
+            info?.describe()?.let { richer -> WarpHub.update { it.copy(netInfo = richer) } }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -220,6 +235,9 @@ class WarpVpnService : VpnService() {
             WarpHub.update { it.copy(netInfo = netInfo.describe()) }
         } else {
             WarpHub.log("Network info: not detected")
+            Isp.describeIdentity(connectIdentity)?.let { fallback ->
+                WarpHub.update { it.copy(netInfo = fallback) }
+            }
         }
         val networkKey = store.networkKey()
             val acct = ensureAccount(networkKey)

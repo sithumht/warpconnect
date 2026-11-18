@@ -13,6 +13,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -81,6 +82,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 class MainActivity : ComponentActivity() {
 
     private var pendingStart by mutableStateOf(false)
+    private val probeScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
 
     private val consent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val wantsStart = pendingStart
@@ -122,6 +124,16 @@ class MainActivity : ComponentActivity() {
         initCrashReporting()
         Analytics.init(this)
         Analytics.trackLaunch()
+        // Pre-probe the raw line (carrier/ASN/country) so the Ready
+        // screen can show it before any tunnel exists.
+        probeScope.launch {
+            val identity = runCatching { store.reportIdentity() }.getOrNull()
+            Log.w("warpconnect", "activity probe: identity=$identity")
+            Isp.describeIdentity(identity)?.let { f -> WarpHub.update { it.copy(netInfo = f) } }
+            val info = Isp.find()
+            Log.w("warpconnect", "activity probe: isp=${info?.describe()}")
+            info?.describe()?.let { r -> WarpHub.update { it.copy(netInfo = r) } }
+        }
         setContent {
             WarpTheme {
                 val context = LocalContext.current
