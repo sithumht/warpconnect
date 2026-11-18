@@ -3,6 +3,26 @@
 All notable changes to WARP Connect are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.3] - 2026-11-18
+
+### Fixed
+- **Version metadata**: v1.0.2's APK shipped with `versionName "1.0.1"` /
+  `versionCode 2` — the bump was missed. This release labels itself 1.0.3 /
+  code 3 correctly.
+- Windows: the connect ladder now queries the stats board for an
+  ASN-matched endpoint **before** falling back to seeds or a full scan
+  (`/recommended`, ASN preferred over ISP substring), mirroring the Android
+  fast path; the recommendation is validated and tried only after the same
+  handshake check as any other candidate.
+- Stats worker source (`stats-worker/`) is now versioned in the repo.
+
+### Changed
+- Stats dashboard redesigned to the app's visual language (radial-glow navy,
+  glowing app-disc brand mark, teal eyebrow captions, mono readouts,
+  green-tinted online-now panel, sign-out added to both pages). Deploy is
+  separate from this release (the board is a Cloudflare Worker); current
+  build: `stats-worker/src/worker.js`.
+
 ## [1.0.2] - 2026-11-16
 
 Two delivery targets in one release: the Android APK and the Windows desktop build (new).

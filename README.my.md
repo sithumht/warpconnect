@@ -40,8 +40,8 @@ GitHub မလိုပါ။ **[@warpconnect_bot](https://t.me/warpconnect_bot)*
 ## ထည့်သွင်းနည်း (Install နည်း)
 
 1. [Releases](https://github.com/sithumht/warpconnect/releases) ကို သွားပါ
-2. `warpconnect-v1.0.2.apk` ကို နှိပ်ပြီး download လုပ်ပါ
-3. Download ပြီးသွားရင် `warpconnect-v1.0.2.apk` ကို နှိပ်ပါ
+2. `warpconnect-v1.0.3.apk` ကို နှိပ်ပြီး download လုပ်ပါ
+3. Download ပြီးသွားရင် `warpconnect-v1.0.3.apk` ကို နှိပ်ပါ
 4. "Install unknown apps" ခွင့်ပြုဖို့ တောင်းခံလာပါက **Allow** / **ခွင့်ပြုပါ** ကို နှိပ်ပါ
 5. Install ပြီးရင် app ကိုဖွင့်ပြီး **CONNECT** ကို နှိပ်ပါ
 6. ပထမဆုံးအကြိမ် ချိတ်ဆက်မှု ၂ မိနစ်မှ ၅ မိနစ်လောက် ကြာနိုင်ပါတယ် (account ပြုလုပ်ခြင်း + endpoint ရှာဖွေခြင်း)။ နောက်ပိုင်းကတော့ စက္ကန့်ပိုင်းနဲ့ ချိတ်ဆက်နိုင်ပါတယ်
@@ -60,13 +60,13 @@ Google Play Store ကနေ download မဟုတ်တဲ့ APK တွေက�
 လုံခြုံမှုကို ပိုစိတ်ပူသူများအတွက်:
 
 ```
-SHA-256: 9c4cfa491a6c6233a61b1b6bfb8a24a9f5fcfaf95da2e5765288ce020286b92b
+SHA-256: 737aeb5d1241dfb3bb43f82692d4abfebc6070d7ffb92eb4287c1a9c8c03d5a6
 ```
 
 SHA-256 ကို Windows မှာ ဒီလိုစစ်နိုင်ပါတယ်:
 
 ```powershell
-Get-FileHash warpconnect-v1.0.2.apk
+Get-FileHash warpconnect-v1.0.3.apk
 ```
 
 ## ချိတ်ဆက်နေတာကို ဘယ်လိုသိမလဲ
